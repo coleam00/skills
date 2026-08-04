@@ -103,6 +103,10 @@ def page_subject(stem: str) -> str | None:
     named, because the filename already says it.
     """
     s = stem.lower()
+    # Notion and similar exporters append a 32-char hex id to every filename.
+    # Left in place it makes the subject "acme corp 1a2b3c..." which matches
+    # nothing in the prose, so the whole vault becomes unattributable.
+    s = re.sub(r"[\s_-]+[0-9a-f]{8,32}$", "", s)
     if DATE_NAMED.match(s) or s in NOT_A_SUBJECT or len(s) < 3:
         return None
     return norm(s.replace("-", " ").replace("_", " "))
@@ -138,6 +142,8 @@ def scan(root: Path, extra: list[str]):
         vocab[norm(t)] = t
 
     subjects: dict[str, list] = defaultdict(list)
+    money_seen = 0
+    journal_files = 0
     bullets = dated = 0
     durable_bullets = durable_dated = 0
     finished_open: list[tuple[str, int, str]] = []
@@ -152,6 +158,7 @@ def scan(root: Path, extra: list[str]):
         # A daily/journal file carries its date in its name; its bullets do not
         # each need one, so they are excluded from the dating metric.
         is_journal = bool(DATE_NAMED.match(p.stem.lower()))
+        journal_files += is_journal
         if SCHEMA_STATE.search(text) and SCHEMA_LOG.search(text):
             schema_pages.append(rel)
 
@@ -185,6 +192,7 @@ def scan(root: Path, extra: list[str]):
                 continue
 
             money = MONEY.findall(line)
+            money_seen += len(money)
             status = [s.lower() for s in STATUS.findall(line)]
             if not (money or status):
                 continue
@@ -208,10 +216,15 @@ def scan(root: Path, extra: list[str]):
                      "text": line.strip()[:108]})
 
     return (files, subjects, bullets, dated, durable_bullets, durable_dated,
-            finished_open, schema_pages, words, vocab)
+            finished_open, schema_pages, words, vocab, money_seen, journal_files)
 
 
-def contradictions(subjects: dict) -> list[dict]:
+def contradictions(subjects: dict, min_files: int = 2) -> list[dict]:
+    """min_files is normally 2: a disagreement inside one page is usually history.
+
+    A vault that IS one or two files has no cross-file option, so that rule would
+    silently make it unauditable. There, one file is enough.
+    """
     out = []
     for subj, hits in subjects.items():
         seen = set()
@@ -235,7 +248,7 @@ def contradictions(subjects: dict) -> list[dict]:
                         continue
                     vals.setdefault(fmt_money(*mv), []).append(h)
             files = {h["file"] for g in vals.values() for h in g}
-            if len(vals) >= 2 and len(files) >= 2:
+            if len(vals) >= 2 and len(files) >= min_files:
                 out.append({"subject": subj,
                             "kind": "recurring" if bucket else "onetime",
                             "values": sorted(vals),
@@ -284,8 +297,8 @@ def main() -> int:
         return 2
 
     (files, subjects, bullets, dated, dur_b, dur_d,
-     fin_open, schema, words, vocab) = scan(root, a.subject)
-    conts = contradictions(subjects)
+     fin_open, schema, words, vocab, money_seen, journals) = scan(root, a.subject)
+    conts = contradictions(subjects, min_files=1 if len(files) <= 2 else 2)
     always = [s.replace("\\", "/").lower() for s in a.always_loaded]
 
     def in_always(h):
@@ -315,9 +328,7 @@ def main() -> int:
 
     print(f"\n{'-' * W}\n1. ONE SUBJECT, TWO PLACES, DIFFERENT ANSWERS\n{'-' * W}")
     if not conts:
-        print("  None found across files.")
-        print("  If you expected some, the values may not be written as money or")
-        print("  status words. Name them with --subject and re-run.")
+        print("  None found.")
     for c in conts[:6]:
         star = "  ***" if any(in_always(h) for h in c["hits"]) else ""
         print(f"\n  {c['subject']}  ->  {len(c['values'])} answers: "
@@ -358,6 +369,29 @@ def main() -> int:
         print("  agent reads on every session. Those are the ones that bite.")
     print(f"  {len(fin_open)} finished item(s) still sitting in an open list.")
     print(f"  {pct}% of durable bullets are dated.")
+
+    # A zero here means one of two very different things, and saying "clean" when
+    # the scan simply could not see is the worst failure this tool has available.
+    blind = []
+    if not money_seen:
+        blind.append("No monetary values anywhere. Values are the only thing this\n"
+                     "    scan can compare without guessing, so it has checked almost\n"
+                     "    nothing. Name the facts that matter with --subject, and read\n"
+                     "    the notes directly.")
+    if journals and journals == len(files):
+        blind.append("Every file is a dated journal. That is an event log, and events\n"
+                     "    are supposed to accumulate. The question is not whether these\n"
+                     "    are messy, it is whether any file anywhere holds the CURRENT\n"
+                     "    value. If not, the missing piece is a state layer, not a fix.")
+    if not vocab:
+        blind.append("No per-subject pages found, so values could not be attributed to\n"
+                     "    a subject across files. Pass --subject to name them.")
+    if blind:
+        print(f"\n{'-' * W}\n  COVERAGE WARNING: a low count above may mean 'not visible',\n"
+              f"  not 'not present'.\n{'-' * W}")
+        for b in blind:
+            print(f"  *  {b}")
+
     print("\n  Nothing was modified. This script only reads.")
     return 0
 

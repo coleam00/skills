@@ -32,15 +32,31 @@ the stale copy usually sits higher in the file, so it gets read first.
 remember to update the old entry fails quietly and constantly. Give the page two
 sections and the rule follows from where a fact lands.
 
-## Phase 1: audit
+## Phase 1: establish the shape
 
-Establish two things before running anything:
+**Do not assume a wiki, a vault, or pages.** Most people have none of those. Look at
+what actually exists before anything else, because it changes both what the audit can
+see and what the fix should be.
 
-1. **Where the notes live.** A folder of markdown.
+| Shape | Looks like | Where state should live |
+|---|---|---|
+| **Page per subject** | `clients/acme.md`, `projects/x.md` | two sections on each page |
+| **One big file** | a single `notes.md` or `CLAUDE.md` | a `## Current State` block at the top |
+| **Daily notes only** | `2026-06-01.md`, and nothing else | **nothing to convert.** A state layer is missing entirely |
+| **Not markdown** | Notion, Apple Notes, a chat assistant's memory | the idea still applies; the tooling does not |
+
+Then establish two things:
+
+1. **Where the notes live.** A folder of markdown, for the scan.
 2. **What the agent reads on every session.** `CLAUDE.md`, a `MEMORY.md`, a system
    prompt file, whatever loads automatically. This matters more than anything else:
    a stale fact in an archive is harmless, the same fact in the always-loaded file is
    the bug. If the user does not know, say so and run without it.
+
+Daily-notes-only is the case most worth naming out loud. Dated notes are an **event
+log**, and events are supposed to accumulate; nothing about them is broken. What is
+missing is any place that says what is true *now*. Telling someone to restructure
+their journal would be actively wrong.
 
 ```bash
 python <skill>/scripts/audit.py <notes-dir> \
@@ -49,6 +65,13 @@ python <skill>/scripts/audit.py <notes-dir> \
 
 Pass `--subject "Acme Corp"` to track named subjects that matter to the user, and
 `--json` for machine-readable output. The script only reads; it never writes.
+
+**A zero is not a clean bill of health.** The scan compares monetary values, because
+those are the only thing it can compare without guessing. Notes with no money in them,
+or with no per-subject pages to attribute values to, are largely invisible to it, and
+it prints a COVERAGE WARNING saying so. Read that warning out rather than reporting
+"no problems found". Where it fires, the audit is the agent's job, not the script's:
+read the always-loaded file and a handful of pages and compare them by hand.
 
 **Why a script rather than reading the files directly:** the count has to be the same
 twice. A model asked to tally 600 bullets returns a confident number and a different
@@ -84,11 +107,22 @@ common case where it is *diligent and still wrong*: it checks a page, warns that
 another file looks stale, and still misses the true value because that value was
 never promoted anywhere durable.
 
-## Phase 4: convert one page
+## Phase 4: fix one place
 
-Never bulk-convert. Pick the single worst page, usually the one whose contradiction
-touches the always-loaded file. Convert that one so the user sees the shape and
-agrees to it before it happens forty more times.
+Never bulk-convert, and never convert a page the user did not agree to. Fix the
+single worst *location*, which depends on the shape found in phase 1:
+
+- **Page per subject** → give that one page the two sections below.
+- **One big file** → add a `## Current State` block at the top and leave everything
+  else beneath it. No new files, no folder structure.
+- **Daily notes only** → create **one** file holding current values, and leave every
+  journal entry untouched. The journal was already correct.
+- **Not markdown** → do not restructure anything. Explain where the current value
+  should live in the tool they already use, and stop there.
+
+The shape below is the page-per-subject version; adapt the same two ideas to the
+others. What has to be true in every case is only this: **one place says what is true
+now, and it gets replaced rather than added to.**
 
 ```markdown
 ## Current State
