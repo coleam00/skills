@@ -161,5 +161,5 @@ audit's real value is identifying *which* of the two problems is in play.
 
 ## Resources
 
-- `scripts/audit.py` — run it for the deterministic scan; `--help` lists all flags,
+- `scripts/audit.py`: run it for the deterministic scan; `--help` lists all flags,
   `--json` returns structured findings. Never read it into context; only its output.

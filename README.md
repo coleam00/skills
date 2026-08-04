@@ -34,7 +34,7 @@ Run these two commands inside Claude Code:
 That's it. All 32 skills, managed and read-only, and `/plugin marketplace update` pulls new ones as I add them.
 Plugin skills are namespaced, so you invoke them as `/skills:piv-implement`.
 
-The whole set costs roughly 4,000 tokens of always-on context (just the descriptions; the bodies load only when a
+The whole set costs roughly 4,200 tokens of always-on context (just the descriptions; the bodies load only when a
 skill fires). Run `claude plugin details skills` to see the per-skill breakdown, and disable the plugin any
 time with `/plugin`.
 
