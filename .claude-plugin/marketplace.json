@@ -8,17 +8,19 @@
   },
   "plugins": [
     {
-      "name": "cole-ai-skills",
+      "name": "skills",
       "displayName": "Cole's AI Skills",
       "source": "./",
-      "skills": ["./.claude/skills"],
+      "skills": [
+        "./.claude/skills"
+      ],
       "description": "The PIV loop (plan, implement, validate, review, commit, PR) plus priming, planning, worktrees, and the meta-skills for building your own AI Layer.",
       "author": {
         "name": "Cole Medin",
         "url": "https://github.com/coleam00"
       },
-      "homepage": "https://github.com/coleam00/cole-ai-skills",
-      "repository": "https://github.com/coleam00/cole-ai-skills",
+      "homepage": "https://github.com/coleam00/skills",
+      "repository": "https://github.com/coleam00/skills",
       "license": "MIT",
       "category": "productivity",
       "keywords": [
@@ -27,7 +29,9 @@
         "code-review",
         "worktrees",
         "ai-layer",
-        "agentic-coding"
+        "agentic-coding",
+        "ablation",
+        "context-engineering"
       ]
     }
   ]

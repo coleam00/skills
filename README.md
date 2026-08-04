@@ -8,7 +8,7 @@ A skill is a folder with a `SKILL.md` in it: a name, a description of when to us
 should follow. Your agent loads the description at startup and pulls in the full skill only when the work matches.
 That's the whole idea, and it's why skills scale where a 2,000-line `CLAUDE.md` doesn't.
 
-These 30 skills are the AI Layer from my [Agentic Coding course](https://dynamous.ai). They're built around one
+These 31 skills are the AI Layer from my [Agentic Coding course](https://dynamous.ai). They're built around one
 loop I run on nearly every ticket:
 
 **prime → plan → implement → validate → review → commit → PR**
@@ -27,23 +27,32 @@ edit. That's the point: read them, take the ones that fit how you work, rewrite 
 Run these two commands inside Claude Code:
 
 ```
-/plugin marketplace add coleam00/cole-ai-skills
-/plugin install cole-ai-skills@cole-medin
+/plugin marketplace add coleam00/skills
+/plugin install skills@cole-medin
 ```
 
-That's it. All 30 skills, managed and read-only, and `/plugin marketplace update` pulls new ones as I add them.
-Plugin skills are namespaced, so you invoke them as `/cole-ai-skills:piv-implement`.
+That's it. All 31 skills, managed and read-only, and `/plugin marketplace update` pulls new ones as I add them.
+Plugin skills are namespaced, so you invoke them as `/skills:piv-implement`.
 
-The whole set costs roughly 3,900 tokens of always-on context (just the descriptions; the bodies load only when a
-skill fires). Run `claude plugin details cole-ai-skills` to see the per-skill breakdown, and disable the plugin any
+The whole set costs roughly 4,000 tokens of always-on context (just the descriptions; the bodies load only when a
+skill fires). Run `claude plugin details skills` to see the per-skill breakdown, and disable the plugin any
 time with `/plugin`.
+
+> **If that first command fails with `Permission denied (publickey)`:** the `owner/repo` shorthand clones over
+> SSH, and you don't have an SSH key on your GitHub account. Use the HTTPS URL instead, which needs no key:
+>
+> ```
+> /plugin marketplace add https://github.com/coleam00/skills.git
+> ```
+>
+> Setting `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` in your environment makes the shorthand use HTTPS permanently.
 
 ### As editable files, in any agent
 
 ```bash
-npx skills add coleam00/cole-ai-skills                             # everything
-npx skills add coleam00/cole-ai-skills --list                      # see what's here first
-npx skills add coleam00/cole-ai-skills --skill piv-plan-implementation piv-implement piv-validate
+npx skills add coleam00/skills                             # everything
+npx skills add coleam00/skills --list                      # see what's here first
+npx skills add coleam00/skills --skill piv-plan-implementation piv-implement piv-validate
 ```
 
 Add `-g` to install globally (`~/.claude/skills/`) instead of into the current project. This route writes real
@@ -55,15 +64,15 @@ reaching for.
 They're only markdown files:
 
 ```bash
-git clone https://github.com/coleam00/cole-ai-skills.git
-cp -r cole-ai-skills/.claude/skills/piv-implement your-project/.claude/skills/
+git clone https://github.com/coleam00/skills.git
+cp -r skills/.claude/skills/piv-implement your-project/.claude/skills/
 ```
 
 ### Or ask your agent
 
 This works fine too:
 
-> Clone https://github.com/coleam00/cole-ai-skills, look at the skills in `.claude/skills/`, and copy the ones
+> Clone https://github.com/coleam00/skills, look at the skills in `.claude/skills/`, and copy the ones
 > that fit this project into my `.claude/skills/` folder. Tell me which ones you picked and why.
 
 For the last two, restart your session (or run `/skills`) and they'll show up.
@@ -121,6 +130,7 @@ For the last two, restart your session (or run `/skills`) and they'll show up.
 |---|---|
 | `rules-create-global` | Derives a lean root `CLAUDE.md` from your codebase or your specs. The customizable `/init` |
 | `rules-check-drift` | Checks whether your rules file is still *true* after recent changes |
+| `ablate-ai-layer` | Tests whether your rules still earn their place: strips them, reruns the same task, diffs the two |
 | `skills-create` | Authors a new skill, or refactors a fat one into `SKILL.md` plus `references/` |
 | `hooks-create` | Turns "never let the agent touch my migrations" into a working hook, wired into settings |
 | `opportunity-scan` | Reads how you actually work and recommends what to encode next |
@@ -144,8 +154,8 @@ The `npx skills` CLI installs to 75+ agents (Codex, Cursor, Copilot, Cline, Wind
 rest) into whatever directory each one expects:
 
 ```bash
-npx skills add coleam00/cole-ai-skills -a codex
-npx skills add coleam00/cole-ai-skills -a cursor -a claude-code
+npx skills add coleam00/skills -a codex
+npx skills add coleam00/skills -a cursor -a claude-code
 ```
 
 If your agent has no skills mechanism at all, the fallback is boring and effective: keep the folder in your repo
