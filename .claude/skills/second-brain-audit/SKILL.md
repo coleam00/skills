@@ -1,6 +1,6 @@
 ---
 name: second-brain-audit
-description: Audit a folder of notes, a memory directory, or an AI second brain for facts that have quietly stopped being true, then convert the worst page to a Current State / Log structure so it stops recurring. Finds one subject answered differently across files, weights whatever the agent auto-loads every session, and reports rather than merges near-identical keys. Use when an assistant returns an outdated answer, when notes or memory files may be stale, when a vault needs checking for contradictions, or when someone asks how to stop a second brain from rotting, mentions memory rot, or asks about state vs event.
+description: Audit any second brain, notes folder, or agent memory for facts that have quietly stopped being true, then fix the worst one so it stops recurring. Works on a wiki, a single notes file, daily notes, or a non-markdown tool, and adapts the fix to whichever it finds. Checks every current-sounding claim in whatever the agent loads each session against the freshest evidence, and separates contradicted claims from unsupported ones. Use when an assistant gives an outdated answer, when notes or memory files may be stale, when a vault needs checking for contradictions, or when someone asks how to stop a second brain from rotting, mentions memory rot, or asks about state versus event.
 ---
 
 # Second Brain Audit
@@ -58,27 +58,58 @@ log**, and events are supposed to accumulate; nothing about them is broken. What
 missing is any place that says what is true *now*. Telling someone to restructure
 their journal would be actively wrong.
 
+## Phase 2: audit the always-loaded surface
+
+**This is the part that works on every second brain**, in any tool, in any domain,
+with or without the script. Run it always, even when the scan found plenty.
+
+Whatever the agent reads on every session is small: that is what makes it always
+loadable. So it can be read in full and checked claim by claim.
+
+1. **Read that surface completely.** The always-loaded file, or the top of the one
+   big file, or the pinned page. All of it.
+2. **Extract every state-shaped claim.** Anything phrased as a current fact: a
+   status, an owner, a rate, a version, a deadline, a "currently", a "we use", a
+   "lives at". Ignore anything phrased as an event, since events stay true.
+3. **For each claim, go and find the freshest evidence anywhere in the notes.**
+   Grep the subject. Read the newest file that mentions it.
+4. **Sort each claim into three piles:**
+   - **Confirmed.** The detail agrees.
+   - **Contradicted.** Something newer disagrees. This is rot, and it is the
+     headline.
+   - **Unsupported.** Nothing anywhere backs it up. Often the claim was true once
+     and the evidence was never written, which is worth saying out loud.
+
+Ten to thirty claims is normal, and it is a few minutes of reading. A research vault
+with no money in it, a personal wiki, a Notion workspace: all auditable this way, and
+none of them by the script.
+
+Report the contradicted pile first, then the unsupported pile. Both are findings.
+
+## Phase 3: run the scan, if the notes suit it
+
+An accelerator, not the audit. It applies to markdown folders where facts carry
+monetary values, and it finds cross-file disagreements far faster than reading can.
+Skip it otherwise; phase 2 already did the work.
+
 ```bash
 python <skill>/scripts/audit.py <notes-dir> \
     --always-loaded MEMORY.md --always-loaded CLAUDE.md
 ```
 
-Pass `--subject "Acme Corp"` to track named subjects that matter to the user, and
-`--json` for machine-readable output. The script only reads; it never writes.
+Pass `--subject "Acme Corp"` to track named subjects by name, and `--json` for
+structured output. The script only reads; it never writes.
 
-**A zero is not a clean bill of health.** The scan compares monetary values, because
-those are the only thing it can compare without guessing. Notes with no money in them,
-or with no per-subject pages to attribute values to, are largely invisible to it, and
-it prints a COVERAGE WARNING saying so. Read that warning out rather than reporting
-"no problems found". Where it fires, the audit is the agent's job, not the script's:
-read the always-loaded file and a handful of pages and compare them by hand.
+**A zero is not a clean bill of health.** Values are the only thing it can compare
+without guessing, so notes with no money in them are largely invisible to it. It
+prints a COVERAGE WARNING when it knows it was blind. Read that warning out rather
+than reporting "no problems found".
 
-**Why a script rather than reading the files directly:** the count has to be the same
-twice. A model asked to tally 600 bullets returns a confident number and a different
-one tomorrow, which is the same class of failure this skill exists to fix. The script
-counts. The agent judges.
+**Why a script at all:** the count has to be the same twice. A model asked to tally
+600 bullets returns a confident number and a different one tomorrow, which is the
+class of failure this skill exists to fix. The script counts. The agent judges.
 
-## Phase 2: read what the script cannot see
+## Phase 4: read what neither can see
 
 Open a few flagged pages and look for what no regex will catch:
 
@@ -93,7 +124,7 @@ Open a few flagged pages and look for what no regex will catch:
   They are lists on purpose. Converting one destroys what makes it useful, and every
   structural check still passes.
 
-## Phase 3: report
+## Phase 5: report
 
 Lead with the single most damaging finding, not a summary of the tool's output:
 
@@ -107,7 +138,7 @@ common case where it is *diligent and still wrong*: it checks a page, warns that
 another file looks stale, and still misses the true value because that value was
 never promoted anywhere durable.
 
-## Phase 4: fix one place
+## Phase 6: fix one place
 
 Never bulk-convert, and never convert a page the user did not agree to. Fix the
 single worst *location*, which depends on the shape found in phase 1:
@@ -157,7 +188,7 @@ Conversion rules, in order of importance:
 Re-ask the earlier question afterwards so the correct answer is visible. Same notes,
 same agent, one page restructured.
 
-## Phase 5: change the write path
+## Phase 7: change the write path
 
 This phase decides whether the audit was worth anything. Converting pages fixes
 today; changing how facts get written is what stops the recurrence.
