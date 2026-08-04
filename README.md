@@ -27,7 +27,7 @@ edit. That's the point: read them, take the ones that fit how you work, rewrite 
 Run these two commands inside Claude Code:
 
 ```
-/plugin marketplace add coleam00/Cole-AI-skills
+/plugin marketplace add coleam00/cole-ai-skills
 /plugin install cole-ai-skills@cole-medin
 ```
 
@@ -41,9 +41,9 @@ time with `/plugin`.
 ### As editable files, in any agent
 
 ```bash
-npx skills add coleam00/Cole-AI-skills                             # everything
-npx skills add coleam00/Cole-AI-skills --list                      # see what's here first
-npx skills add coleam00/Cole-AI-skills --skill piv-plan-implementation piv-implement piv-validate
+npx skills add coleam00/cole-ai-skills                             # everything
+npx skills add coleam00/cole-ai-skills --list                      # see what's here first
+npx skills add coleam00/cole-ai-skills --skill piv-plan-implementation piv-implement piv-validate
 ```
 
 Add `-g` to install globally (`~/.claude/skills/`) instead of into the current project. This route writes real
@@ -55,15 +55,15 @@ reaching for.
 They're only markdown files:
 
 ```bash
-git clone https://github.com/coleam00/Cole-AI-skills.git
-cp -r Cole-AI-skills/.claude/skills/piv-implement your-project/.claude/skills/
+git clone https://github.com/coleam00/cole-ai-skills.git
+cp -r cole-ai-skills/.claude/skills/piv-implement your-project/.claude/skills/
 ```
 
 ### Or ask your agent
 
 This works fine too:
 
-> Clone https://github.com/coleam00/Cole-AI-skills, look at the skills in `.claude/skills/`, and copy the ones
+> Clone https://github.com/coleam00/cole-ai-skills, look at the skills in `.claude/skills/`, and copy the ones
 > that fit this project into my `.claude/skills/` folder. Tell me which ones you picked and why.
 
 For the last two, restart your session (or run `/skills`) and they'll show up.
@@ -144,8 +144,8 @@ The `npx skills` CLI installs to 75+ agents (Codex, Cursor, Copilot, Cline, Wind
 rest) into whatever directory each one expects:
 
 ```bash
-npx skills add coleam00/Cole-AI-skills -a codex
-npx skills add coleam00/Cole-AI-skills -a cursor -a claude-code
+npx skills add coleam00/cole-ai-skills -a codex
+npx skills add coleam00/cole-ai-skills -a cursor -a claude-code
 ```
 
 If your agent has no skills mechanism at all, the fallback is boring and effective: keep the folder in your repo
