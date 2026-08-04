@@ -38,8 +38,9 @@ The whole set costs roughly 4,000 tokens of always-on context (just the descript
 skill fires). Run `claude plugin details skills` to see the per-skill breakdown, and disable the plugin any
 time with `/plugin`.
 
-> **If that first command fails with `Permission denied (publickey)`:** the `owner/repo` shorthand clones over
-> SSH, and you don't have an SSH key on your GitHub account. Use the HTTPS URL instead, which needs no key:
+> **If that first command fails with `Permission denied (publickey)`:** the `owner/repo` shorthand prefers SSH,
+> and your SSH key isn't authenticating to GitHub. Recent Claude Code versions detect that and fall back to HTTPS
+> on their own. If yours doesn't, pass the HTTPS URL directly, which needs no key:
 >
 > ```
 > /plugin marketplace add https://github.com/coleam00/skills.git
