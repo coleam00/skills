@@ -1,4 +1,4 @@
-# Cole's Claude Code Skills
+# Cole's AI Skills
 
 The skills I actually use to build software with coding agents. Straight out of my `.claude/skills/` folder.
 
@@ -22,34 +22,51 @@ edit. That's the point: read them, take the ones that fit how you work, rewrite 
 
 ## Bring them in
 
-**Everything, in one command:**
+### As a Claude Code plugin (easiest, stays updated)
 
-```bash
-npx skills add coleam00/skills
+Run these two commands inside Claude Code:
+
+```
+/plugin marketplace add coleam00/Cole-AI-skills
+/plugin install cole-ai-skills@cole-medin
 ```
 
-**Pick individual ones:**
+That's it. All 30 skills, managed and read-only, and `/plugin marketplace update` pulls new ones as I add them.
+Plugin skills are namespaced, so you invoke them as `/cole-ai-skills:piv-implement`.
+
+The whole set costs roughly 3,900 tokens of always-on context (just the descriptions; the bodies load only when a
+skill fires). Run `claude plugin details cole-ai-skills` to see the per-skill breakdown, and disable the plugin any
+time with `/plugin`.
+
+### As editable files, in any agent
 
 ```bash
-npx skills add coleam00/skills --list                              # see what's here
-npx skills add coleam00/skills --skill piv-plan-implementation piv-implement piv-validate
+npx skills add coleam00/Cole-AI-skills                             # everything
+npx skills add coleam00/Cole-AI-skills --list                      # see what's here first
+npx skills add coleam00/Cole-AI-skills --skill piv-plan-implementation piv-implement piv-validate
 ```
 
-Add `-g` to install globally (`~/.claude/skills/`) instead of into the current project.
+Add `-g` to install globally (`~/.claude/skills/`) instead of into the current project. This route writes real
+files into your repo, so you can edit them, which is what I'd actually recommend once you know which ones you keep
+reaching for.
 
-**Or just clone and copy.** They're only markdown files:
+### Or just clone and copy
+
+They're only markdown files:
 
 ```bash
-git clone https://github.com/coleam00/skills.git
-cp -r skills/.claude/skills/piv-implement your-project/.claude/skills/
+git clone https://github.com/coleam00/Cole-AI-skills.git
+cp -r Cole-AI-skills/.claude/skills/piv-implement your-project/.claude/skills/
 ```
 
-**Or ask your agent.** This works fine too:
+### Or ask your agent
 
-> Clone https://github.com/coleam00/skills, look at the skills in `.claude/skills/`, and copy the ones that fit
-> this project into my `.claude/skills/` folder. Tell me which ones you picked and why.
+This works fine too:
 
-Restart your session (or run `/skills`) and they'll show up.
+> Clone https://github.com/coleam00/Cole-AI-skills, look at the skills in `.claude/skills/`, and copy the ones
+> that fit this project into my `.claude/skills/` folder. Tell me which ones you picked and why.
+
+For the last two, restart your session (or run `/skills`) and they'll show up.
 
 ## The skills
 
@@ -127,8 +144,8 @@ The `npx skills` CLI installs to 75+ agents (Codex, Cursor, Copilot, Cline, Wind
 rest) into whatever directory each one expects:
 
 ```bash
-npx skills add coleam00/skills -a codex
-npx skills add coleam00/skills -a cursor -a claude-code
+npx skills add coleam00/Cole-AI-skills -a codex
+npx skills add coleam00/Cole-AI-skills -a cursor -a claude-code
 ```
 
 If your agent has no skills mechanism at all, the fallback is boring and effective: keep the folder in your repo

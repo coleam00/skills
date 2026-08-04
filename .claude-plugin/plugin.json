@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "cole-ai-skills",
+  "displayName": "Cole's AI Skills",
+  "version": "1.0.0",
+  "description": "The PIV loop (plan, implement, validate, review, commit, PR) plus priming, planning, worktrees, and the meta-skills for building your own AI Layer.",
+  "author": {
+    "name": "Cole Medin",
+    "url": "https://github.com/coleam00"
+  },
+  "homepage": "https://github.com/coleam00/Cole-AI-skills",
+  "repository": "https://github.com/coleam00/Cole-AI-skills",
+  "license": "MIT",
+  "keywords": [
+    "piv-loop",
+    "planning",
+    "code-review",
+    "worktrees",
+    "ai-layer",
+    "agentic-coding"
+  ],
+  "skills": ["./.claude/skills"]
+}
