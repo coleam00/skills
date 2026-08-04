@@ -1,0 +1,165 @@
+---
+name: second-brain-audit
+description: Audit a folder of notes, a memory directory, or an AI second brain for facts that have quietly stopped being true, then convert the worst page to a Current State / Log structure so it stops recurring. Finds one subject answered differently across files, weights whatever the agent auto-loads every session, and reports rather than merges near-identical keys. Use when an assistant returns an outdated answer, when notes or memory files may be stale, when a vault needs checking for contradictions, or when someone asks how to stop a second brain from rotting, mentions memory rot, or asks about state vs event.
+---
+
+# Second Brain Audit
+
+Notes rot in a specific way. Nothing is corrupted and nothing goes missing: a fact
+simply stops being true, the note keeps saying it, and nothing raises a hand.
+
+The cause is almost always the same. **The write path can only append.** New
+information arrives and becomes a new line under the old line, which is correct for
+some facts and ruinous for others.
+
+## The one idea
+
+Every stored fact is one of two kinds.
+
+| | Meaning | Correct update |
+|---|---|---|
+| **State** | one current value, and it **changes** | **replace** it |
+| **Event** | a timestamped thing that **happened** | **append** it |
+
+A price, a status, an owner, a deadline: state. A payment, a signature, a decision,
+a lesson learned: event.
+
+The update rules are **opposites**. Replacing an event destroys history. Appending a
+state creates two answers to one question with nothing marking which is current, and
+the stale copy usually sits higher in the file, so it gets read first.
+
+**Structure carries this rule, not an instruction.** Asking a model, or a person, to
+remember to update the old entry fails quietly and constantly. Give the page two
+sections and the rule follows from where a fact lands.
+
+## Phase 1: audit
+
+Establish two things before running anything:
+
+1. **Where the notes live.** A folder of markdown.
+2. **What the agent reads on every session.** `CLAUDE.md`, a `MEMORY.md`, a system
+   prompt file, whatever loads automatically. This matters more than anything else:
+   a stale fact in an archive is harmless, the same fact in the always-loaded file is
+   the bug. If the user does not know, say so and run without it.
+
+```bash
+python <skill>/scripts/audit.py <notes-dir> \
+    --always-loaded MEMORY.md --always-loaded CLAUDE.md
+```
+
+Pass `--subject "Acme Corp"` to track named subjects that matter to the user, and
+`--json` for machine-readable output. The script only reads; it never writes.
+
+**Why a script rather than reading the files directly:** the count has to be the same
+twice. A model asked to tally 600 bullets returns a confident number and a different
+one tomorrow, which is the same class of failure this skill exists to fix. The script
+counts. The agent judges.
+
+## Phase 2: read what the script cannot see
+
+Open a few flagged pages and look for what no regex will catch:
+
+- **Lifecycle conflicts.** A page saying "launching next week" while a log entry from
+  three months ago records the project being cancelled. No number disagrees, so
+  nothing is flagged, and it is completely wrong.
+- **Facts never written down at all.** The most common cause of a wrong answer is not
+  bad organization; it is that the true value only ever existed in a conversation or
+  a daily note. Reorganizing cannot reach it. Say so plainly rather than implying the
+  restructure will help.
+- **Pages that must not be touched.** Checklists, reference lists, packing lists.
+  They are lists on purpose. Converting one destroys what makes it useful, and every
+  structural check still passes.
+
+## Phase 3: report
+
+Lead with the single most damaging finding, not a summary of the tool's output:
+
+> Three different answers for what Acme pays, and the oldest one is in the file the
+> agent reads every session.
+
+Where an agent already runs over these notes, **demonstrate it**. Ask the question the
+notes should answer and read the reply out. Watching an assistant confidently return
+a number that stopped being true in March lands harder than any report. Point out the
+common case where it is *diligent and still wrong*: it checks a page, warns that
+another file looks stale, and still misses the true value because that value was
+never promoted anywhere durable.
+
+## Phase 4: convert one page
+
+Never bulk-convert. Pick the single worst page, usually the one whose contradiction
+touches the always-loaded file. Convert that one so the user sees the shape and
+agrees to it before it happens forty more times.
+
+```markdown
+## Current State
+<!-- One entry per subject. Dated. REPLACED on update, never appended to. -->
+
+- **Retainer** (2026-08-01): $3,200/mo, renewed through February 2027
+- **Main contact** (2026-05-02): Curtis Ilo
+
+## Log
+<!-- Append-only. Never edit or delete an entry. -->
+
+- (2026-04-30) Delivered and paid, $21,000
+- (2026-05-02) Retainer started at $2,800/mo
+- (2026-06-15) Added reply drafting, retainer to $3,200/mo
+```
+
+Conversion rules, in order of importance:
+
+1. **Lose nothing.** Every existing line lands in one of the two sections, verbatim.
+   This is sorting, not rewriting. Improving the prose is how information disappears
+   without anyone noticing.
+2. **One entry per subject in Current State.** Where two lines describe the same
+   current value, the newer wins and the older moves to the Log. Where the order is
+   unclear, ask. Never guess.
+3. **Date every Current State entry.** Ask for a missing date or take it from file
+   history. An undated current value is barely better than a stale one.
+4. **Never merge two subjects that merely look similar.** "Acme (May)" and "Acme Corp
+   renewal" may be genuinely different things. A duplicate entry is a cheap mistake;
+   a wrong merge destroys information. Report near-misses and let the user decide.
+5. **Show a diff and get approval** before writing.
+
+Re-ask the earlier question afterwards so the correct answer is visible. Same notes,
+same agent, one page restructured.
+
+## Phase 5: change the write path
+
+This phase decides whether the audit was worth anything. Converting pages fixes
+today; changing how facts get written is what stops the recurrence.
+
+Add to whatever file instructs the agent (`CLAUDE.md`, `AGENTS.md`, a system prompt):
+
+```markdown
+## Writing to these notes
+
+Every fact is state or event.
+
+- **State** (one current value that changes: price, status, owner, date):
+  find the matching line in `## Current State` and REPLACE it. Always date it.
+  Never add a second line for the same subject.
+- **Event** (a thing that happened): append to `## Log`. Never edit or delete
+  an existing Log entry.
+
+If unsure, append to the Log and say so. A missing state update is recoverable;
+a rewritten history is not.
+```
+
+Then state the honest part: this instruction gets followed most of the time, not all
+of the time. Anything that must happen every time needs a mechanism. Two cheap ones
+worth more than the instruction:
+
+- Re-run this audit on a schedule and watch whether the count climbs.
+- Stamp dates with a script after the fact instead of asking for them.
+
+## Set expectations honestly
+
+Restructuring alone often moves the number less than people expect. When it does not
+move, the reason is usually that the correct fact was never captured, and no amount
+of reorganizing reaches a fact nobody wrote down. Say that when it applies. The
+audit's real value is identifying *which* of the two problems is in play.
+
+## Resources
+
+- `scripts/audit.py` — run it for the deterministic scan; `--help` lists all flags,
+  `--json` returns structured findings. Never read it into context; only its output.

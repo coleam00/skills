@@ -8,7 +8,7 @@ A skill is a folder with a `SKILL.md` in it: a name, a description of when to us
 should follow. Your agent loads the description at startup and pulls in the full skill only when the work matches.
 That's the whole idea, and it's why skills scale where a 2,000-line `CLAUDE.md` doesn't.
 
-These 31 skills are the AI Layer from my [Agentic Coding course](https://dynamous.ai). They're built around one
+These 32 skills are the AI Layer from my [Agentic Coding course](https://dynamous.ai). They're built around one
 loop I run on nearly every ticket:
 
 **prime → plan → implement → validate → review → commit → PR**
@@ -31,7 +31,7 @@ Run these two commands inside Claude Code:
 /plugin install skills@cole-medin
 ```
 
-That's it. All 31 skills, managed and read-only, and `/plugin marketplace update` pulls new ones as I add them.
+That's it. All 32 skills, managed and read-only, and `/plugin marketplace update` pulls new ones as I add them.
 Plugin skills are namespaced, so you invoke them as `/skills:piv-implement`.
 
 The whole set costs roughly 4,000 tokens of always-on context (just the descriptions; the bodies load only when a
@@ -136,6 +136,7 @@ For the last two, restart your session (or run `/skills`) and they'll show up.
 | `opportunity-scan` | Reads how you actually work and recommends what to encode next |
 | `system-execution-report` | Reflects on a just-finished implementation: what diverged from the plan |
 | `system-evolution-review` | Finds the bugs in your *process*, not your code |
+| `second-brain-audit` | Finds facts in your notes that quietly stopped being true, and restructures so they stop |
 
 **Tools**
 
