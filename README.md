@@ -176,8 +176,9 @@ Two things deliberately ship as templates and expect an edit before first use:
 
 - **`piv-validate`** has a placeholder command list. Put your project's real test, type-check, and lint commands
   in it.
-- **`piv-commit`**, **`piv-create-pr`**, and the **`piv-review-*`** skills read `.claude/references/conventions.md`
-  if it exists. Create one and they'll follow your conventions instead of guessing.
+- **`piv-commit`** and **`piv-create-pr`** read `.claude/references/conventions.md` if it exists, the first its
+  `## commit` section and the second its `## pr` section. Create one and they'll follow your conventions instead
+  of guessing.
 
 `piv-review-pr` will hand its deep pass to a `code-reviewer` subagent if you have one in `.claude/agents/`. Without
 it, the skill still works, it just does the review inline.

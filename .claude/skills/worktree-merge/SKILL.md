@@ -61,5 +61,5 @@ linter). Do not hardcode `pytest`/`mypy`/`pyright` — use whatever this repo ac
 
 - `--no-ff` preserves each feature branch's history.
 - The integration branch is disposable — the original branch only moves after every merge and the full suite pass.
-- Prefer opening a PR per branch (the reviewed path from V9) when you're on a team; this skill is for fast local
+- Prefer opening a PR per branch when you're on a team; this skill is for fast local
   integration when you own the merge.

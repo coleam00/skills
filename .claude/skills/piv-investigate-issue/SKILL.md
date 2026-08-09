@@ -40,8 +40,8 @@ search stays out of your main context:
 - **`research-agent`** (a second explorer) — find WHERE the relevant code lives + patterns to mirror: the error
   strings from the issue, related functions/modules, similar implementations, existing test patterns.
 
-Merge their findings into a short map (`file:line` + why each matters) before forming the root cause. *(This is the
-V15/V20 fan-out, applied to diagnosis.)*
+Merge their findings into a short map (`file:line` + why each matters) before forming the root cause. *(This is
+the parallel-subagent fan-out, applied to diagnosis.)*
 
 ### 3. Review Recent History — when was it introduced?
 
