@@ -1,6 +1,6 @@
 ---
 name: piv-plan-implementation
-description: Creates a comprehensive, context-rich implementation plan through deep codebase analysis and external research. Accepts a tracker ticket (a Jira/Linear/GitHub key or URL, fetched from the tracker) or a free-form feature request. Use when you have a ticket or feature and need a one-pass-ready plan before writing any code.
+description: Creates a comprehensive, context-rich implementation plan through deep codebase analysis, a short clarifying interview, and external research. Accepts a tracker ticket (a Jira/Linear/GitHub key or URL, fetched from the tracker) or a free-form feature request. Use when you have a ticket or feature and need a one-pass-ready plan before writing any code.
 argument-hint: "[ticket key/URL (fetched from your tracker), or a free-form feature description]"
 ---
 
@@ -96,11 +96,36 @@ So that <benefit/value>
 - Understand database/model patterns if applicable
 - Identify authentication/authorization patterns if relevant
 
-**Clarify Ambiguities:**
+**Clarify Ambiguities — GATE:**
 
-- If requirements are unclear at this point, ask the user to clarify before you continue
-- Get specific implementation preferences (libraries, approaches, patterns)
-- Resolve architectural decisions before proceeding
+Codebase analysis is done, so the open questions are now *specific*. This is the one moment where you know
+enough to ask well and have not yet written anything. **GATE** means: post the questions, then stop. End the
+turn and wait for the answers. Do not ask and answer in the same breath, and do not roll into Phase 3.
+
+Ask in **one cluster**, numbered, 3-6 questions max, each carrying a **recommended default** so answering is
+cheap ("I'll mirror the first unless you say otherwise"). Draw them only from what the analysis actually left
+open:
+
+1. **Scope boundary** — the adjacent thing a reasonable reader would assume is in scope. Confirm it is out.
+2. **Pattern fork** — two existing patterns both fit. Name both with `file:line` and ask which to mirror.
+3. **Contract shape** — the API surface, payload, or data-model change the ticket implies but never states.
+4. **Failure behavior** — what happens on the error path the ticket is silent about.
+5. **Preference** — a library or trade-off with no precedent in this codebase to inherit.
+6. **Done** — an acceptance criterion that is missing, or written so that it cannot be checked.
+
+Skip any category with nothing genuinely open; never manufacture questions to fill the list. If the ticket, its
+epic and the architecture doc genuinely settle everything, say so in one line and proceed. Silence is not the
+same as clearance.
+
+**Thin answers:** reflect a vague answer back as the concrete choice it leaves open ("'handle errors gracefully'
+— a 4xx with a message, or retry then 503?") and ask once more. Never upgrade a vague answer into a confident plan.
+
+**If they decline** ("just write it"): honour it, but name what you are guessing. Every unanswered item becomes
+an `Assumed — <the assumption>, confirm before execution` line in `OPEN QUESTIONS / ASSUMPTIONS`, and the task it
+affects carries a `**GOTCHA**` naming it. Never guess silently.
+
+**Already settled upstream:** anything the ticket, its epic, or the linked architecture page already answers is
+not open. Inherit it and skip (see "Inherit, don't re-decide").
 
 ### Phase 3: External Research & Documentation
 
@@ -442,6 +467,7 @@ Execute every command to ensure zero regressions and 100% feature correctness.
 - [ ] Integration points clearly mapped
 - [ ] Gotchas and anti-patterns captured
 - [ ] Every task has executable validation command
+- [ ] Phase 2's clarifying cluster was asked and answered, or explicitly recorded as nothing open
 
 ### Implementation Ready ✓
 
@@ -466,7 +492,7 @@ Execute every command to ensure zero regressions and 100% feature correctness.
 
 ## Success Metrics
 
-**One-Pass Implementation**: Execution agent can complete feature without additional research or clarification
+**One-Pass Implementation**: Execution agent can complete feature without additional research or clarification — clarification the *user* owes the plan belongs in Phase 2's gate, not deferred to the execution agent
 
 **Validation Complete**: Every task has at least one working validation command
 
