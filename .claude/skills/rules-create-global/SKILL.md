@@ -62,7 +62,7 @@ Global rules encode **technical** truth — so you derive them from technical de
 > so the structure, key files, and conventions are loaded into this conversation, then run this skill with no path.
 > (Large repo? Optionally fan out a few built-in subagents to explore areas in parallel, aggregate a short
 > `codebase-analysis.md`, and pass that path instead.) This skill packages the *derive → extract → seams → prune → check*
-> steps you saw in V5, not the exploration.
+> steps, not the exploration.
 
 > **Before you run this — protect any existing rules.** If the project already has a `CLAUDE.md` /
 > `AGENTS.md`, **copy or rename it first** (e.g. `CLAUDE.md.bak`) so this skill doesn't overwrite something
@@ -80,7 +80,7 @@ Global rules encode **technical** truth — so you derive them from technical de
 - **Neither yet?** `CLAUDE.md` for a Claude-Code-only project; `AGENTS.md` if the team is multi-tool.
 
 Content + structure are ~90% identical either way — everything below is **"your rules file,"** not one vendor's.
-Use the course's **`.claude/CLAUDE.md.template`** as the structure (it works as an AGENTS.md too).
+Use the structure laid out below (it works as an AGENTS.md just as well).
 
 ## The methodology (bake this in)
 
@@ -115,7 +115,7 @@ Use the course's **`.claude/CLAUDE.md.template`** as the structure (it works as 
   code either way. Not primed and no path passed? Run `/prime-codebase` first.
 - **If a rules file already exists:** read it first and treat it as a starting point — and make sure it's
   backed up (see "protect any existing rules" above) so nothing you wrote by hand is lost.
-- Read the best-practices docs above. Load `.claude/CLAUDE.md.template` as the structure.
+- Read the best-practices docs above. Follow the structure laid out in this skill.
 
 ### 2. Derive the root `CLAUDE.md`
 Fill the template's sections, sourced from the input:

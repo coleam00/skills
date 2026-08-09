@@ -129,7 +129,7 @@ sections only, scannable:
 
 ## Notes
 
-- Interview-led; never generate from thin air. Greenfield-first (on an existing product the epic comes from V6, and you decide its architecture in V7 with `plan-architecture`).
+- Interview-led; never generate from thin air. Greenfield-first. On an existing product the epic is the input, and you decide its architecture separately with `plan-architecture`.
 - **Solo builder?** Building *for yourself* → you're the user; prove or kill it on yourself fast, you can jump
   closer to a solution. Building *for someone else* → you can't introspect their needs; building it *right*
   beats building it. Either way: thinnest MVP + experiments is how you learn what "right" is.

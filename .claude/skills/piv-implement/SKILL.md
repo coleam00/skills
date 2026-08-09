@@ -51,6 +51,9 @@ For EACH task in "Step by Step Tasks":
 - After each file change, check syntax
 - Ensure imports are correct
 - Verify types are properly defined
+- **Run the task's own `VALIDATE` command before starting the next task.** Every task in the plan carries one.
+  A task is not done until its check passes — if it fails, fix it now rather than carrying the failure forward.
+  The full suite still runs at step 4; this is the per-task gate that keeps step 4 from becoming a pile-up.
 
 ### 3. Implement Testing Strategy
 

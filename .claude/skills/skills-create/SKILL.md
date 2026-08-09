@@ -12,8 +12,8 @@ A skill that authors and refactors skills. Two jobs:
 - **Refactor** a fat skill — split detail into `references/`, move output shapes into `templates/`, trim
   `SKILL.md` down to a lean spine of pointers.
 
-**It's built the way it teaches:** a lean body that defers detail to `references/`. That's progressive disclosure
-(the V19 lesson) — and this skill is its own worked example. **It's all composable markdown:** a skill is a
+**It's built the way it teaches:** a lean body that defers detail to `references/`. That's progressive
+disclosure, and this skill is its own worked example. **It's all composable markdown:** a skill is a
 `SKILL.md` plus optional files the agent loads only when it reaches for them.
 
 ## Prescribe the craft, not the content
@@ -27,8 +27,8 @@ Be **strict on how a skill is built** and **agnostic on what any given skill —
   output shape, which phases exist. There is no canonical output — guide the author to a good decision, never hand
   them a fixed one.
 
-Strict on the craft so the author stays free on the content. *(This is the course's "guide, don't prescribe" — and
-take-vs-build: you **build** a skill when you own the process and want it to follow YOUR way.)*
+Strict on the craft so the author stays free on the content. *(Guide, don't prescribe — and take-vs-build: you
+**build** a skill when you own the process and want it to follow YOUR way.)*
 
 ## Classify the skill first
 
@@ -81,8 +81,8 @@ Both modes obey the same craft rules → read `references/skill-standards.md` fi
 > forgets to read it and the output silently changes. Always pair such an extraction with a mandatory-read line.
 
 ## When to build a skill at all
-Build one when you **own a process** and want the agent to follow *your* way of it, repeatedly — the take-vs-build
-rule from V19. A rough threshold: you've prompted the same thing ~3 times (the Rule of Three) → bank it as a skill.
+Build one when you **own a process** and want the agent to follow *your* way of it, repeatedly — the
+take-vs-build rule. A rough threshold: you've prompted the same thing ~3 times (the Rule of Three) → bank it as a skill.
 Don't build a skill for a one-off, or for a tool whose owner already ships a good one.
 
 ## Resources

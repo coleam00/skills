@@ -41,7 +41,7 @@ lint, build. Capture pass/fail + counts. A red suite is a finding in itself.
 
 ## Phase 4 — Review the diff (dispatch the code-reviewer agent)
 
-Hand the deep pass to the **`code-reviewer` agent** (`.claude/agents/code-reviewer.md`) — it reviews against the
+Hand the deep pass to a **`code-reviewer` subagent** if the project has one (`.claude/agents/code-reviewer.md`); otherwise review in this session, in a clean context — it reviews against the
 project's standards and reports **high-confidence issues only**. Read every changed file *in full* (not just the
 diff) for context. Cover: correctness · type safety · pattern/standards compliance · security · performance ·
 tests present · maintainability.
@@ -89,5 +89,5 @@ next step is **`piv-fix-review-findings`** on the report, then re-run validation
 - **Fresh eyes is the whole point** — run this in a clean context (or let the `code-reviewer` agent be the clean
   context). Don't review with the session that wrote the code; it rationalizes instead of scrutinizing.
 - This is the *agentic* gate; it does not replace the human — it gives the human a validated, triaged PR to
-  approve. Going deeper (multiple review agents, tuning the reviewer to your stack, the validation pyramid) is
-  the code-review-as-a-component material later in the course.
+  approve. Going deeper means multiple review agents, tuning the reviewer to your stack, and a validation
+  pyramid behind it.
