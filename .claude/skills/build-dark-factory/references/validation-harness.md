@@ -195,6 +195,41 @@ absent, override to reject and escalate.** Deterministic bash reading the raw ou
 beats a model's summary of that output, every time. Assume the summariser will
 occasionally ignore its own rules, because it will.
 
+### What the factory says to humans is an output, and outputs need assertions too
+
+Everything above is about checks. The factory also produces **artifacts for people**: the
+comment explaining a rejection, the PR body, the escalation note. Those get graded by
+nobody, and they fail silently.
+
+Observed on a real run. Triage rejected an out-of-scope issue perfectly: correct verdict,
+correct label, issue closed not-planned, and a written rejection citing two rules by
+number with an appeal path for the filer. What actually reached the filer was two
+characters:
+
+```
+@-
+```
+
+The reasoning had been assembled in a shell pipeline instead of going through the
+factory's own comment helper, and on Windows the pipeline collapsed to a literal `@-`.
+Every state transition was right. The `gh` call exited 0. The run reported success. The
+only thing lost was the entire explanation, which is the part a human was ever going to
+read.
+
+Two rules come out of it, and the second is the general one:
+
+- **Route every human-facing write through one helper, and make the helper the only way.**
+  A hand-rolled `gh issue comment` in a node is the same class of mistake as a hand-rolled
+  merge: it works until quoting, encoding, or a newline eats it.
+- **Assert the artifact after writing it, not before.** Read the comment back and check it
+  contains the rule citation you meant to send. `exit 0` from the tool that posted it
+  proves the API call succeeded, not that it carried anything. This is exactly
+  empty-is-not-pass, applied to output rather than to checks, and it is easy to miss
+  because output feels like a side effect rather than a result.
+
+The tell that this class of bug is present: **a step whose success is measured by the
+transition it caused rather than by the thing it produced.**
+
 ### Slack is not pass either
 
 Counting checks gets you a floor, and a floor invites the obvious next question: what
