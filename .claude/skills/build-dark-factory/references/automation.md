@@ -111,6 +111,48 @@ No database. No message bus. If information has to travel between workflows, it 
 as a label or a comment. That constraint keeps the system inspectable, and inspectable
 is the property you will want at 2am.
 
+#### Four things labels are not, all learned the hard way
+
+Labels are good shared state and a bad lock. Every one of these was written down as a
+prediction first and then contradicted by a real run.
+
+1. **There is no compare-and-swap.** Two dispatchers reading `factory:accepted` both
+   claim the issue, because "read the label, write the label" is not atomic and nothing
+   in the API makes it so. **Moving to GitHub does not retire your per-target lock.** If
+   you built one for the file backend, keep it; the label is the audit trail, not the
+   mutex.
+2. **Label writes are not immediately visible to label reads.** Measured lag between
+   setting a label and seeing it on the list endpoint was two to four seconds. A
+   dispatcher that writes then immediately re-reads will occasionally see the old world.
+3. **The stop button must be a label you ADD, and the read must fail closed.** "Remove a
+   label to stop" is the obvious design and it is backwards: a missing label is
+   indistinguishable from an API call that failed to list it, so a network blip reads as
+   "carry on". Add `factory:stop`, treat *any* error listing it as stopped, and keep a
+   local kill file too, because the local one works with the network down.
+4. **Closed is not a disposition.** `deferred` and `rejected` are both closed issues and
+   are indistinguishable without labels. Get that wrong and the factory rejects the
+   roadmap the quarter it arrives, which is the failure the mission file's
+   deferred-versus-never split exists to prevent. GitHub also performs transitions your
+   table never authorised: `Closes #N` in a merged PR closes the issue, so
+   closed-and-unlabelled is a real state you have to handle.
+
+#### Branch protection does not replace your merge script
+
+The tempting move on GitHub is to delete `merge.sh` and let a required check plus branch
+protection be the gate, on the grounds that a ruleset is not something the agent can
+edit.
+
+It is, in the case that matters. **The factory authenticates as a principal that
+administers the repository, and an account that can edit a ruleset can bypass one.**
+Unless you have provisioned a separate least-privilege identity for the factory, and
+verified it cannot administer the repo, the merge stays in code you control.
+
+Two smaller traps in the same area: nothing publishes a check run if your gate executes
+on the dispatching machine rather than in Actions, so a *required* check that never
+reports blocks every merge forever. And a third-party App can comment on a PR seconds
+after it opens, so a judge that reads PR comments is reading a stranger's text. Have it
+read the diff and the issue from disk instead.
+
 ### Priority order, and why it is load-bearing
 
 1. **fix** a PR labelled needs-fix (under the attempt cap)
@@ -120,6 +162,28 @@ is the property you will want at 2am.
 
 **Finish in-flight work before starting new work.** Reversed, the factory triages
 forever while its own PRs rot, and throughput looks busy while going to zero.
+
+### A node that exits 0 having done nothing
+
+Three separate versions of this showed up in one week of real dispatch, and none of them
+were visible when the same workflows were driven by hand.
+
+- **An agent hit its turn cap**, escalated, and the message named a fault that did not
+  exist. The expensive planning half had been paid for and thrown away. Read the agent's
+  own JSON result and report the real terminating reason.
+- **An agent asked to run a command its allowlist did not cover**, was refused, said so
+  politely in prose, and exited 0 having changed nothing. **A tool denial is not a
+  failure and it is not a success**; it is the node telling you it wanted something it
+  could not have. Log denials per node, and quote them into the escalation whenever the
+  diff comes back empty. Doing this once revealed that a planning node had been silently
+  denied tools on essentially every run since it was written, asking, being refused, and
+  working around it.
+- **A node edited its worktree and committed nothing**, and the cleanup removed the
+  worktree seconds after the guard had correctly reported two changed files. A human
+  commits without being told to. An agent does not, unless the workflow makes it a step.
+
+The general rule: **assert on the artifact, not on the exit code.** A run that produced no
+commit, no PR and no diff did not succeed, whatever it returned.
 
 ### Limits that are not optional
 
