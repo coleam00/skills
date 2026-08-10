@@ -378,3 +378,7 @@ triages forever while its own PRs rot.
 - `scripts/factory_doctor.py`: deterministic audit of a factory repo - protected
   files, holdout leaks, gate-is-code, empty-is-not-pass, ignored secrets, autonomy
   level. Run it in Phases 2 and 7. Never read its source into context; only its output.
+- `scripts/_test_factory_doctor.py`: the doctor's own tests. Builds a healthy factory,
+  breaks one thing at a time, and requires the doctor to notice. Run it after changing
+  the doctor. A gate that has never failed is a gate nobody has tested, and that applies
+  to this skill's gate too.
