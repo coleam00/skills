@@ -139,6 +139,12 @@ For the last two, restart your session (or run `/skills`) and they'll show up.
 | `system-evolution-review` | Finds the bugs in your *process*, not your code |
 | `second-brain-audit` | Finds facts in your notes that quietly stopped being true, and restructures so they stop |
 
+**Autonomy: hand the whole loop over**
+
+| Skill | What it does |
+|---|---|
+| `build-dark-factory` | Takes a PRD and builds a repo around it that ships validated code with nobody at the keyboard. All five components, in construction order, plus a deterministic audit of what you built. It encodes the AI coding process you already run rather than replacing it, and it deliberately does not write the PRD: bring one, or make one with `plan-create-prd` first |
+
 **Tools**
 
 | Skill | What it does |
