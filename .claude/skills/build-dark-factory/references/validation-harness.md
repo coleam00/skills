@@ -244,20 +244,28 @@ That is the right pattern and it has a failure mode that is easy to miss.
 the human raises it. The gap between observed and floor is exactly the number of
 assertions that can be deleted with the gate still green.**
 
-Measured on a real factory built by this skill, a week in:
+Measured on a real factory built by this skill. Seven assertions could be removed and
+every gate would still report `OK`. Nothing was broken and nobody was careless: the
+factory had been adding checks correctly, and raising the floor to match is a protected
+edit it is not allowed to make.
+
+**Then the same factory was measured again after one round of harness work**, and this is
+the part that matters:
 
 ```
-metric                floor  observed  slack
-playthrough_checks        9        12      3
-unit_tests                7         9      2
-snapshot_keys            19        20      1
-feel_checks              23        24      1
-                                   TOTAL   7
+metric               floor  observed  slack      floor  observed  slack
+                       ---- before ----            ---- after -----
+playthrough_checks       9        12      3          9        12      3
+unit_tests               7         9      2          7         9      2
+feel_checks             23        24      1         23        24      1
+legibility_frames        -         -      -         60        87     27
+                              TOTAL       7                  TOTAL   33
 ```
 
-Seven assertions could be removed and every gate would still report `OK`. Nothing was
-broken and nobody was careless: the factory had been adding checks correctly, and raising
-the floor to match is a protected edit it is not allowed to make.
+**The hole grew from 7 to 33 in one cycle**, and it grew *because the harness got better*.
+A new check family arrived running 87 frames against a floor of 60, and every assertion
+of that surplus is deletable. Improvement widens the gap, which is the opposite of what a
+ratchet is supposed to do.
 
 **So make slack fail, or make it block.** Pick one:
 
