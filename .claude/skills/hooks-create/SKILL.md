@@ -92,8 +92,9 @@ tool name(s) (e.g. `"Bash"`, `"Edit|Write"`, `"mcp__.*"`); empty/`"*"` means eve
 everything if the goal is specific.
 
 ### 4. Write the hook script
-- Default to a **`uv` single-file Python script** at `.claude/hooks/<event_snake_case>.py` (matches the pack's
-  tooling). Use another language only if the user asks.
+- Default to a **`uv` single-file Python script** at `.claude/hooks/<event_snake_case>.py` — a `uv run --script`
+  shebang plus inline `# /// script` metadata, so it needs no install and no project venv of its own. Use another
+  language only if the user asks.
 - Read the JSON from stdin, do the check, and:
   - to **block**: print a clear reason to `stderr` and `sys.exit(2)`;
   - to **allow**: `sys.exit(0)` (optionally print context to stdout for the injecting events).
@@ -114,27 +115,38 @@ everything if the goal is specific.
 >   `No module named …` **every single time** — so a "don't finish until tests pass" hook blocks on green as
 >   readily as on red, and reports a nonsense reason. It looks like it works. It does not.
 > - **DO** run the user's command **verbatim, as a shell string, in the project directory — with uv's ephemeral
->   venv stripped from the environment.** `shell=True` alone is not enough: `uv run` puts its throwaway
->   interpreter first on `PATH` and sets `VIRTUAL_ENV`, so even a shell command resolves `python` to the wrong
->   one. Copy this helper as-is:
+>   venv stripped AND the project's own venv put first.** Both steps are required. `shell=True` alone is not
+>   enough: `uv run` puts its throwaway interpreter first on `PATH` and sets `VIRTUAL_ENV`. But **removing uv's
+>   venv does not activate the project's** — a hook is not the user's shell, so `.venv` was never on `PATH` to
+>   begin with, and `python` falls through to whatever global interpreter the machine has. That global one has a
+>   different (often broken) set of packages, so the hook exits 2 on a perfectly green suite and blames some
+>   unrelated module. Copy this helper as-is:
 >   ```python
 >   TEST_COMMAND = "python -m pytest -q"   # exactly what the user typed; the one line they'll edit
 >
->   def _project_env() -> dict:
->       """os.environ minus uv's ephemeral venv, so the project's own tools resolve."""
+>   def _project_env(project_root: Path) -> dict:
+>       """os.environ with uv's ephemeral venv removed and the PROJECT's venv first."""
 >       env = os.environ.copy()
->       venv = env.pop("VIRTUAL_ENV", None)
->       if venv:
->           drop = {os.path.join(venv, "Scripts"), os.path.join(venv, "bin")}
->           env["PATH"] = os.pathsep.join(
->               p for p in env.get("PATH", "").split(os.pathsep) if p not in drop
->           )
+>       ephemeral = env.pop("VIRTUAL_ENV", None)
+>       parts = env.get("PATH", "").split(os.pathsep)
+>       if ephemeral:                                    # 1. uv's throwaway venv, out
+>           drop = {os.path.join(ephemeral, "Scripts"), os.path.join(ephemeral, "bin")}
+>           parts = [p for p in parts if p not in drop]
+>       for candidate in (".venv", "venv"):              # 2. the project's own venv, first
+>           for bindir in ("Scripts", "bin"):
+>               venv_bin = project_root / candidate / bindir
+>               if venv_bin.is_dir():
+>                   env["VIRTUAL_ENV"] = str(project_root / candidate)
+>                   parts.insert(0, str(venv_bin))
+>                   env["PATH"] = os.pathsep.join(parts)
+>                   return env
+>       env["PATH"] = os.pathsep.join(parts)
 >       return env
 >
+>   root = Path(hook_input["cwd"])          # the project root Claude Code passes in
 >   result = subprocess.run(
 >       TEST_COMMAND, shell=True, capture_output=True, text=True,
->       cwd=hook_input.get("cwd"),          # the project root Claude Code passes in
->       env=_project_env(),
+>       cwd=str(root), env=_project_env(root),
 >   )
 >   ```
 >   Put the command in a single named constant at the top of the file so the user can edit one obvious line.
@@ -189,8 +201,9 @@ Then:
   Stop / UserPromptSubmit) — not PostToolUse.
 - ✅ The **matcher is scoped** to what the user actually meant (not firing on everything by accident).
 - ✅ The script **fails open** — any error exits 0; the only `exit 2` is the intended block, with a clear stderr reason.
-- ✅ Any **project command runs verbatim via `shell=True` in the project `cwd`** — never rebuilt with
-  `sys.executable` or a bare `python` (the hook's own interpreter has none of the project's dependencies).
+- ✅ Any **project command runs verbatim via `shell=True` in the project `cwd`**, with uv's ephemeral venv
+  stripped **and the project's own venv put first on `PATH`** — never rebuilt with `sys.executable` (the hook's
+  own interpreter has none of the project's dependencies, and the global one has the wrong ones).
 - ✅ A `Stop` / `SubagentStop` hook honors **`stop_hook_active`** so it cannot loop.
 - ✅ `settings.json` was **merged**, not overwritten; existing hooks still present.
 - ✅ **You ran the hook** and confirmed it exits 0 when it should allow and 2 when it should block — not just read it.

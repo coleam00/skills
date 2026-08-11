@@ -1,0 +1,72 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ${CLAUDE_PROJECT_DIR}/.claude/hooks/session_start_context.py",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+
+    "PreToolUse": [
+      {
+        "matcher": "Read|Edit|MultiEdit|Write|NotebookEdit|Bash|PowerShell|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre_tool_use_secrets.py",
+            "timeout": 15,
+            "statusMessage": "Checking guardrails..."
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Edit|MultiEdit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre_tool_use_dependencies.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ${CLAUDE_PROJECT_DIR}/.claude/hooks/post_tool_use_log.py",
+            "timeout": 15,
+            "async": true
+          }
+        ]
+      }
+    ],
+
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ${CLAUDE_PROJECT_DIR}/.claude/hooks/stop_tests_must_pass.py",
+            "timeout": 600,
+            "statusMessage": "Running tests before finishing..."
+          },
+          {
+            "type": "command",
+            "command": "uv run ${CLAUDE_PROJECT_DIR}/.claude/hooks/stop_notify.py",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}

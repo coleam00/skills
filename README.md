@@ -176,6 +176,30 @@ Two things to adjust when you port them:
   invocation. Elsewhere, say "use the piv-validate skill" instead.
 - **`allowed-tools` frontmatter.** A few skills declare it. Other agents ignore the field harmlessly.
 
+## Hooks
+
+Skills are the *procedural* half of an AI Layer, the things the agent reaches for. `hooks/` is the other half:
+deterministic code that fires on a lifecycle event whether the model remembers or not.
+
+> A rule *asks* the agent to behave. A hook **guarantees** it.
+
+Six copy-in hooks live in [`hooks/`](hooks/) with their own README: block every route to your secrets, refuse
+`rm -rf`, enforce declared file coupling, log every tool call, inject today's git state at session start, refuse
+to let the agent finish while the tests are red, and ping you when it does finish.
+
+```bash
+mkdir -p .claude/hooks
+cp hooks/*.py .claude/hooks/
+cp hooks/settings.json.example .claude/settings.json   # or merge the "hooks" block
+```
+
+Unlike a skill, **a hook does something the moment it exists** — so read them before you wire them, set
+`TEST_COMMAND` in the stop hook, and check both directions (exit 0 on green, exit 2 on red) before you trust it.
+[`hooks/README.md`](hooks/README.md) covers the five failure modes that waste an afternoon, the venv trap chief
+among them.
+
+To build one of your own without writing Python, describe it to the `hooks-create` skill.
+
 ## Make them yours
 
 Two things deliberately ship as templates and expect an edit before first use:

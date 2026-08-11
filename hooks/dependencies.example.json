@@ -1,0 +1,34 @@
+{
+  "_comment": [
+    "Coupling map for pre_tool_use_dependencies.py.",
+    "Copy this to .claude/hooks/dependencies.json and replace the entries with your own.",
+    "",
+    "Each key is a glob matched against the project-relative, forward-slashed path of",
+    "the file the agent is about to EDIT. Each value is the list of files it must have",
+    "READ in this session first. Globs use fnmatch, so `*` does not stop at a slash:",
+    "`app/api/*.py` matches nested paths too.",
+    "",
+    "Declare the couplings that have actually bitten you. A map with four honest",
+    "entries beats a map with forty aspirational ones, because every entry is a turn",
+    "the agent spends reading."
+  ],
+
+  "globs": {
+    "app/api/routes/*.py": [
+      "app/api/schemas.py",
+      "docs/api-contract.md"
+    ],
+
+    "app/models/*.py": [
+      "app/db/migrations/README.md"
+    ],
+
+    "src/components/*.tsx": [
+      "src/types/api.ts"
+    ],
+
+    "*/migrations/*": [
+      "docs/migration-policy.md"
+    ]
+  }
+}
