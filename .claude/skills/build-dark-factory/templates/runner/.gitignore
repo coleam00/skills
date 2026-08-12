@@ -1,0 +1,74 @@
+# COPY THIS INTO YOUR REPO ROOT ALONGSIDE factory/, OR MERGE IT INTO THE ONE YOU HAVE.
+#
+# This is not housekeeping. Two different things break without it.
+#
+# 1. THE FACTORY WILL NOT START. `run-workflow.sh` runs a pre-flight before any node that
+#    can commit, and it REFUSES to run when a credential-shaped path is not ignored:
+#
+#        ESCALATE: PREFLIGHT: .env is not gitignored; a git add -A would publish it
+#
+#    That check is right, and it fires whether or not the file exists yet - because the
+#    danger is the file that appears for the first time three weeks from now, inside a
+#    `git add -A` in a step nobody is watching. On a public repo that is publication, and
+#    rotating afterwards is the cleanup, not the fix.
+#
+# 2. THE FACTORY'S OWN ARTIFACTS WOULD BE COMMITTED. Every run writes rendered prompts,
+#    node stdout, plans and verdicts under `.factory/runs/`. Those are BUILDER artifacts.
+#    Committing them puts the implementer's plan on the branch, where the validator can
+#    read it - which quietly destroys the holdout property the whole auto-merge argument
+#    rests on. The tripwire exists to catch that; this stops it happening.
+
+# --- credentials. The pre-flight asserts these, so removing a line stops the factory ---
+.env
+.env.*
+secrets.json
+credentials.json
+*.local
+*credential*
+*secret*
+*.pem
+*.key
+id_rsa
+id_ed25519
+service-account.json
+
+# Agent and tool config that routinely carries a live token. Add your own tool's here;
+# the point is the shape, not this exact list.
+.archon/config.yaml
+.archon/.env
+.claude/settings.local.json
+config/secrets.yml
+
+# --- factory runtime state: per-machine, regenerated, never meaningful in history ---
+.factory/runs/
+.factory/locks-runtime/
+.factory/STOP
+factory-*.log
+
+# The validator's findings, handed from gate.sh to the fix node across two processes.
+# Runtime, regenerated on every red verdict - and BUILDER-VISIBLE by design, so it must
+# never reach a branch: committed, it would put the judge's reasoning in the tree the next
+# validator reads.
+.factory/findings/
+
+# Every lap creates one of these. `run-workflow.sh` adds `.worktrees/i<n>` for the
+# implementer and `.worktrees/v<n>` for the validator, and a crashed run can leave the
+# directory behind - `git worktree remove --force` drops git's record and still leaves
+# the files on disk, routinely, on Windows. Untracked and unignored, they turn up in the
+# guard's working-tree union and in anyone's `git add -A`, and what they contain is a
+# full second copy of the repository at another commit.
+.worktrees/
+
+# The runner's own modules generate these next to factory/*.py.
+__pycache__/
+*.pyc
+
+# --- deploy snapshots: rebuildable from any sha ---
+builds/
+
+# NOT ignored, deliberately:
+#   .factory/locks/    the thresholds a human set. Protected, and tracked on purpose -
+#                      a floor that is not in history cannot be shown not to have moved.
+#   .factory/holdout/  tracked while it lives in-repo. Moving it to a sibling repo is
+#                      the upgrade; deleting it from history is not.
+#   .factory/prs/      the PR record on the file backend IS state, so it is tracked.

@@ -1,0 +1,11 @@
+# These skills ship executable shell scripts that get copied onto Linux boxes.
+#
+# Without this, a clone on Windows with core.autocrlf=true produces CRLF working copies,
+# and a script copied from here into someone's repo fails on their server with
+# `bad interpreter: /usr/bin/env bash^M` - an error that reads as "the file is missing".
+#
+# Pinned in the repo so it does not depend on anyone's local git config.
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.md text eol=lf

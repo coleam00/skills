@@ -3,6 +3,81 @@
 This is component 5, it is most of the work, and it is the only component that
 decides whether the other four produced anything worth keeping.
 
+---
+
+## What the runner expects you to build
+
+Read this first if you are using `templates/runner/`. Both people who built a factory from
+this skill inferred the whole layout from one default string in `config.sh`, and one of
+them had to read the runner's source to work out how a check's output reaches the gate.
+Neither should have had to.
+
+**`templates/harness/` is a working skeleton of all of this** - `ci.py`, `appproc.py` and
+`e2e.py`. Copy it, run it, then delete every assertion in `e2e.py` and write yours. It
+satisfies the contract below out of the box, so you are editing something that already
+passes rather than debugging plumbing while also deciding what "working" means.
+
+**The contract is four things.**
+
+**1. A single entrypoint, named in `config.sh`.**
+
+```bash
+FACTORY_VALIDATE_CMD="${FACTORY_VALIDATE_CMD:-python harness/ci.py}"
+FACTORY_VALIDATE_QUICK="${FACTORY_VALIDATE_QUICK:-python harness/ci.py --quick}"
+```
+
+`harness/ci.py` is a **convention, not a requirement** - point it at `make check`,
+`npm run gate`, `./scripts/validate.sh`, anything. What matters is that one command runs
+the whole gate. The layout that goes with the convention:
+
+```
+harness/          the checks. The builder CAN read and run these
+  ci.py           the entrypoint: runs everything, prints markers, exits non-zero on failure
+.factory/
+  holdout/        assertions the builder is BLOCKED from reading (--disallowedTools)
+  locks/          thresholds and floors a human set. Protected
+  runs/           per-run artifacts. Gitignored
+```
+
+**2. It must print a positive marker for every check family that RAN**, and the markers
+must match `FACTORY_REQUIRED_MARKERS` in `config.sh`. `APP_STARTED` and `E2E_PASSED` are
+not negotiable. Counts, not just names:
+
+```
+APP_STARTED port=8080
+E2E_PASSED steps=11
+HOLDOUT_PASSED scenarios=2 assertions=30
+MUTATIONS_TOTAL=7
+MUTATIONS_CAUGHT=7
+GATE_OK
+```
+
+**3. It must exit non-zero when the software is broken.** The gate reads the markers, but
+the exit code is what the implement node's own `--quick` run sees.
+
+**4. The append contract, which is the one that bites.** The runner writes `guard.py`'s
+output to the run's `gate.log` and then **appends** your validate command's output to the
+same file. `gate.sh` asserts every required marker against that combined log. Two
+consequences:
+
+- `PROTECTED_OK` comes from the guard, not from you. Do not print it yourself.
+- If your entrypoint truncates or redirects over that log rather than writing to stdout,
+  the guard's markers vanish and every gate fails for a reason that has nothing to do with
+  your code. **Print to stdout and let the runner do the plumbing.**
+
+**`--quick` is a real obligation, not a nicety.** The implement node runs it on itself
+while it works, so it must be fast and it must be a strict subset - never checks the full
+run does not have. It is inside the agent's optimisation loop by definition, which is
+exactly why the full gate re-runs everything independently afterwards and why nothing
+downstream trusts what `--quick` said.
+
+**Do not let the builder edit the harness.** `factory/guard.py` seeds the mutation set on
+the protected list, but `ci.py` *is* the definition of "works" - a builder that can edit
+its own judge can make any claim true. Protect `harness/**`, and route legitimate coverage
+growth to your normal test directory instead.
+
+---
+
 The rule the whole thing rests on:
 
 > **The agent has to validate the app the way the end user experiences it.**
@@ -54,12 +129,19 @@ Seven rungs, cheapest at the bottom. Build them bottom-up; they compose.
 |---|---|---|
 | 7 | **deterministic gate** | green, or there is no merge. Code, never a prompt. |
 | 6 | **holdout scenarios** | written before the work, never shown to the builder |
-| 5 | **visual / screenshot judging** | it actually looks right on a screen |
+| 5 | **visual / screenshot judging** *(not scaffolded — you build it)* | it actually looks right on a screen |
 | 4 | **E2E as the real user** | a real browser or a real client, real data, the full path |
 | | **↑↑↑  THE INDEPENDENCE LINE  ↑↑↑** | *above it, the agent cannot see or edit* |
 | 3 | **integration** | the pieces work together |
 | 2 | **unit** | the functions it just wrote behave |
 | 1 | **static** | types, lint, compiler |
+
+**`templates/harness/ci.py` implements 1, 2, 4, 6 and 7. Rung 5 is not scaffolded**, and
+saying so matters: a doc that lists a rung the scaffold does not ship reads as "you have
+this". You do not. Screenshots an `e2e.py` captures are artifacts nobody looks at until
+something is written to look at them. Build rung 5 if the product has a screen worth
+judging, and treat the row above as a thing to do rather than a thing you have. See the
+frontend section of `templates/harness/README.md` for what that costs.
 
 ### The independence line
 

@@ -1,0 +1,16 @@
+# COPY THIS INTO YOUR REPO ROOT ALONGSIDE factory/.
+#
+# Not tidiness. If this repository is ever checked out on Windows with core.autocrlf on,
+# every factory/*.sh gets CRLF, and on the Linux box that actually runs the factory each
+# one fails with:
+#
+#     bad interpreter: /usr/bin/env bash^M
+#
+# which reads as "the file is missing". You will look for a path bug for an hour.
+#
+# Pinned here, in the repo, so it does not depend on anyone's local git config - the
+# machine that breaks is never the machine you are sitting at.
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.md text eol=lf

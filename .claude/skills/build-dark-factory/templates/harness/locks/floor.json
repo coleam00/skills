@@ -1,0 +1,13 @@
+{
+  "_what_this_is": "THE RATCHET. Copy to .factory/locks/floor.json - it is PROTECTED, so only a human commit can move these numbers. That is the entire mechanism: the gate asserts observed >= floor, and a second check asserts floor(head) >= floor(base), so the move 'delete the assertion and lower the number in the same commit' is not available.",
+
+  "_both_halves_are_needed": "Without the first, coverage can silently fall. Without the second, a builder deletes an assertion and edits the floor to match. Neither half alone is a ratchet.",
+
+  "_the_failure_mode_to_watch": "SLACK. The gap between observed and floor is exactly the number of assertions that can be deleted with the gate still green. It GROWS as the harness improves, because raising the floor is a protected edit the factory cannot make - measured on a real factory, the hole went from 7 to 33 in one cycle BECAUSE the harness got better. Do not print slack as a note and carry on: either fail the gate when observed != floor, or let any slack pin the autonomy dial where it is.",
+
+  "e2e_steps_asserted": 6,
+  "holdout_assertions": 0,
+  "unit_tests": 0,
+
+  "_raise_these": "On the same human commit that adds the assertions. If you find yourself lowering one, the question is what stopped being true."
+}

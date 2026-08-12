@@ -1,0 +1,79 @@
+{
+  "_what_this_is": [
+    "THE STACK-SPECIFIC HALF OF THE HARNESS, in one file.",
+    "",
+    "`ci.py` is the step ladder: run each rung in order, print a positive marker with a",
+    "count, name the rung that stopped the run. That part IS the same in every factory -",
+    "two people built it independently and wrote the same file.",
+    "",
+    "What is NOT the same is every command it runs. The first version of this scaffold",
+    "hardcoded `python -m compileall` and `python -m unittest`, which made a template",
+    "claiming to be universal quietly Python-only. The commands live here instead.",
+    "",
+    "Set what you have. Leave a step empty and it is SKIPPED LOUDLY - the log says",
+    "<STEP>_SKIPPED and the gate can be told to require the marker, so a skipped rung is",
+    "never mistaken for a passed one."
+  ],
+  "_examples": {
+    "python": {
+      "static": "python -m compileall -q .",
+      "unit": "python -m unittest discover -s tests"
+    },
+    "node": {
+      "static": "npx tsc --noEmit",
+      "unit": "npm test --silent"
+    },
+    "go": {
+      "static": "go vet ./...",
+      "unit": "go test ./..."
+    },
+    "rust": {
+      "static": "cargo clippy -- -D warnings",
+      "unit": "cargo test"
+    },
+    "ruby": {
+      "static": "bundle exec rubocop",
+      "unit": "bundle exec rspec"
+    },
+    "dotnet": {
+      "static": "dotnet build --nologo",
+      "unit": "dotnet test --nologo"
+    }
+  },
+  "static": "python -m compileall -q .",
+  "unit": "python -m unittest discover -s tests",
+  "_unit_count_pattern": "A regex with ONE group that captures how many tests ran. Zero is not a pass: a suite that discovered nothing exits 0 and looks perfect. Leave empty to skip the count check, and accept that you cannot tell a passing suite from an absent one.",
+  "unit_count_pattern": "Ran (\\d+) test",
+  "_driver": [
+    "How the E2E reaches your software. THREE SHAPES cover almost everything:",
+    "",
+    "  http     a server. Started on a dynamic port, polled until healthy.",
+    "  cli      a command. Invoked with args, stdout/stderr asserted.",
+    "  library  no process at all. The E2E imports and calls it.",
+    "",
+    "A frontend app is `http` plus a browser-automation CLI in your e2e.py."
+  ],
+  "driver": "http",
+  "e2e_timeout_s": 300,
+  "http": {
+    "start": "python -m app.server --port {port}",
+    "health_path": "/health",
+    "health_contains": "\"status\": \"ok\"",
+    "boot_timeout_s": 30
+  },
+  "cli": {
+    "_note": "The command under test. {args} is substituted per call from e2e.py.",
+    "invoke": "python -m app.cli {args}",
+    "smoke_args": "--version",
+    "smoke_contains": ""
+  },
+  "library": {
+    "_note": "Nothing to start. APP_STARTED is emitted after this import succeeds, which is the equivalent proof that the thing loads at all.",
+    "import_check": "python -c \"import app\""
+  },
+  "browser": {
+    "_note": "ONLY for an app whose correctness is visual. Leave install_check empty if e2e.py never drives a browser. When it is set, factory_doctor runs it at setup - so a missing browser is a setup failure with an install command, not a mystery hang at gate time on a fresh runner.",
+    "install_check": "",
+    "install_hint": "npm i -g agent-browser && agent-browser install   |   pip install playwright && playwright install chromium"
+  }
+}

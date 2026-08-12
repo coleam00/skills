@@ -33,9 +33,10 @@ the approvals, and writing it down here is what makes that legible to the next p
 Everything else is a prompt instruction, which is a suggestion with good manners.
 These are the ones a model cannot argue past:
 
-1. `<path/to/validate-gate.sh>` - asserts `APP_STARTED` and `E2E_PASSED`, checks the
-   protected list, and performs the merge.
-2. <the second one>
+1. `factory/gate.sh` - asserts every marker in `FACTORY_REQUIRED_MARKERS`, checks the
+   counts, and refuses the merge when the raw output and the verdict disagree.
+2. `factory/guard.py` - the protected list and the scope caps. Fails **closed**.
+3. <the third one, if you have it>
 
 ## The end-to-end path
 
