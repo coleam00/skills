@@ -22,6 +22,20 @@ wrong by someone who has not built one of these before.
 > someone retype a document they already wrote is the most common way a well-designed
 > interview fails.
 
+**Use the agent's own question tool where one exists** - `AskUserQuestion` in Claude Code,
+or the equivalent. Each question below is marked **[PICKER]** or **[PROSE]**, and the mark
+is not a style note:
+
+- **[PICKER]** - a decision among options that are already known. The tool renders them
+  with a recommendation, and someone picking from a list answers things they would have
+  skipped in a wall of text. Every default in Round 3 is one call, multi-select.
+- **[PROSE]** - the answer has to be in the user's own words, and offering options
+  replaces it with a menu of your guesses. R1.1 becomes `e2e.py`, the only check with real
+  authority; a picker there is worse than no question at all.
+
+Where there is no such tool, ask in prose and mark the [PICKER] ones by listing the
+options with your recommendation first. Nothing here depends on the tool existing.
+
 **Reflect every answer back as a concrete artifact** before moving on - "so the merge gate
 is: the PR merges only if `APP_STARTED` and `E2E_PASSED` both appear in the run output."
 The point of the interview is to turn opinions into things that can be written down and
@@ -44,7 +58,7 @@ after three questions, these are the three you needed.
 > failure: the agent builds the MVP by hand so the harness has something to test, and the
 > factory inherits the leftovers.
 
-### R1.1 - "Describe the single most valuable thing a user does with this app, as a sequence of actions ending in something you can see."
+### [PROSE] R1.1 - "Describe the single most valuable thing a user does with this app, as a sequence of actions ending in something you can see."
 
 *The* question. The answer becomes the E2E happy path, which is the only check with real
 authority, and it is what `harness/e2e.py` gets rewritten into.
@@ -56,7 +70,7 @@ Force it concrete. Not "users can search." Instead: *open the app → sign in as
 **Bad answer:** any description that never mentions something observable. If it cannot be
 observed it cannot be asserted, and the agent will claim it works.
 
-### R1.2 - "Walk me through how you build a feature with AI today, step by step."
+### [PROSE] R1.2 - "Walk me through how you build a feature with AI today, step by step."
 
 Let this run long. **The workflows are that process with the approvals removed, not a new
 pipeline the user has to learn.** Most people have more process than they think and have
@@ -81,7 +95,7 @@ answer is what the harness is *for* on this specific project.
 
 **Bad answer:** *"I just use Claude Code."* Push for the sequence. Everyone has one.
 
-### R1.3 - "Are you willing to have code merge to main that no human has read?"
+### [PICKER] R1.3 - "Are you willing to have code merge to main that no human has read?"
 
 Ask it exactly that way, then show the dial. **Level 3 is the recommendation - say so, and
 treat it as where the conversation starts.** People often say 5; 5 means the factory writes
@@ -107,7 +121,7 @@ is the bottleneck the build was for.
 Six. Each produces something no template can guess. Spend the time here, especially on the
 harness ones.
 
-### R2.1 - "Name five things you would reject even if a user asked nicely and the code would be easy."
+### [PROSE] R2.1 - "Name five things you would reject even if a user asked nicely and the code would be easy."
 
 *The most valuable list in the build, and the reason a PRD is required.* Start from the
 PRD's **non-goals**, which are usually most of the way there, and read them back. Then push,
@@ -124,7 +138,7 @@ comes.
 
 **Bad answer:** *"anything that doesn't fit."*
 
-### R2.2 - "What must always stay true, even if an issue argues well for changing it?"
+### [PROSE] R2.2 - "What must always stay true, even if an issue argues well for changing it?"
 
 Hard invariants - a rate limit, an auth requirement, a privacy property, a single-tenant
 assumption. Different from out-of-scope items: those are features you will not add, these
@@ -132,7 +146,7 @@ are properties that cannot be edited. They go in **both** `MISSION.md` and
 `FACTORY_RULES.md`, deliberately, because the file read at reject time has to contain the
 rule.
 
-### R2.3 - "How do you check a change did not break things today, and what tells you the app is actually running?"
+### [PROSE] R2.3 - "How do you check a change did not break things today, and what tells you the app is actually running?"
 
 Two halves, one conversation.
 
@@ -147,7 +161,7 @@ reports "not testable" and something downstream counts that as fine.
 **Bad answer to the second half:** *"it starts up."* A process that starts, hangs and
 returns zero is indistinguishable from a healthy one.
 
-### R2.4 - "If someone wanted to make the tests pass without actually fixing anything, what is the easiest cheat?"
+### [PROSE] R2.4 - "If someone wanted to make the tests pass without actually fixing anything, what is the easiest cheat?"
 
 Ask it in those words - it is a question about their code, not about agents, and people
 answer it well. The answers are the holes: delete a test, weaken an assertion, mock the
@@ -155,7 +169,7 @@ thing under test, catch and swallow, special-case the test input.
 
 Each answer becomes a rule in `FACTORY_RULES.md` and, where possible, a structural check.
 
-### R2.5 - the two harness questions, and they are the hard part
+### [PROSE] R2.5 - the two harness questions, and they are the hard part
 
 Do not use the word "holdout" in the question. Ask the plain version, then explain what it
 becomes.
@@ -203,7 +217,7 @@ Then say the thing that makes it stick: **every defect that escapes is a class o
 can currently merge with nobody reading the diff.** That converts an abstract exercise into
 a list of specific holes they now want closed.
 
-### R2.5c - "Which parts of this can a machine never check?"
+### [PROSE] R2.5c - "Which parts of this can a machine never check?"
 
 Ask it right after the two above, while the user is already thinking about what a check
 can and cannot see. **The factory's scope is strictly smaller than the product's**, and the
@@ -218,14 +232,14 @@ That is not a downgrade. It is usually where most of the risk lives, and it is t
 that can actually be defended. But a user who thinks the factory owns the whole MVP will
 read a green gate as "the product is good", and it never meant that.
 
-### R2.6 - "What is the one thing that, if broken, means do not merge no matter what else passed? And what would you rather ship than block on?"
+### [PICKER] R2.6 - "What is the one thing that, if broken, means do not merge no matter what else passed? And what would you rather ship than block on?"
 
 Both halves together, because they are the same dial from opposite ends. The first becomes
 `FACTORY_REQUIRED_MARKERS` - a small, boring list: the app starts, the E2E path passes, no
 protected file was touched. The second is the severity policy, and without it every lint
 nit blocks the loop and the user turns the factory off out of irritation.
 
-### R2.7 - "When something merges, what command would prove the build actually works, and what would it print?"
+### [PROSE] R2.7 - "When something merges, what command would prove the build actually works, and what would it print?"
 
 `deploy.sh` **refuses to move the pointer** without both. A deploy with no health check is a
 deploy that cannot fail, and a step that cannot fail is a comment. These two answers are
@@ -240,11 +254,21 @@ workflows on default-token commits at all. Tell them; do not ask. See `deploymen
 
 ---
 
-## Round 3 - the defaults, confirmed in one message
+## Round 3 - the defaults, confirmed in one message  **[PICKER]**
 
 **Send these as a single list with the proposed value filled in, and ask what to change.**
 Not one at a time, and not as questions. Every line has a working default, and most users
 will change one or two.
+
+**This is the round the question tool was made for.** One call, **multi-select**, phrased
+as *"which of these do you want to change?"* with the proposed value in each option's
+description. Selecting nothing is a valid and common answer, and it takes one click
+instead of ten replies. Ask for the new value only for the ones they select.
+
+Beware the option cap: real question tools allow only a handful of options per call. Put
+the ones a user is most likely to want to change first - concurrency, poll interval, PR
+cap, protected paths - and hand the rest over as plain text alongside. Do not drop a row
+to fit the widget.
 
 | what | proposed default | why it is a default, not a question |
 |---|---|---|

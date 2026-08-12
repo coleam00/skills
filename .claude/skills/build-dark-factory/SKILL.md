@@ -280,11 +280,21 @@ nobody wants to play.
 2. Everything else exactly as the construction order says: guidance layer → validation
    harness → workflow repo → deployment → trigger.
 
-Offer the reduced version too, and make it a real option rather than a consolation: write
-the guidance layer and copy in the scaffolds with the contract documented and the
-assertions left empty, and let the user build the skeleton themselves. The
-`MISSION.md`/`FACTORY_RULES.md` pair is useful for interactive work whether or not a cron
-is ever turned on.
+#### Put the fork to the user with the question tool
+
+This is a real decision with three known answers, so use `AskUserQuestion` (or the
+equivalent) rather than a paragraph, and **recommend the first**:
+
+1. **Build the thin skeleton now, then the factory on it** *(recommended)* - name the
+   slice and name what you are leaving out, so "recommended" cannot be read as "I will
+   build your MVP".
+2. **Guidance layer and scaffolds only** - `MISSION.md`, `FACTORY_RULES.md`, `CLAUDE.md`,
+   plus `runner/` and `harness/` copied in with the contract documented and the assertions
+   left empty. The user builds the skeleton; you resume at component 5. A real option, not
+   a consolation: the `MISSION.md`/`FACTORY_RULES.md` pair earns its keep in interactive
+   work whether or not a cron is ever turned on.
+3. **Stop - architecture first** - when the PRD defers the thing 0c's reachability
+   constraint depends on, and the user would rather settle it before code exists.
 
 ## Phase 1. Interview
 
@@ -313,6 +323,26 @@ first two minutes.
 
 Reflect each answer back as a concrete artifact ("so the merge gate is: X") before moving
 on.
+
+**Use the agent's own question tool where one exists** - `AskUserQuestion` in Claude Code,
+and whatever the equivalent is elsewhere. It renders real options with a recommendation
+instead of asking someone to read a paragraph and type a reply, and a user picking from a
+list answers questions they would have skipped. Fall back to prose where there is no such
+tool; nothing below depends on it.
+
+**But only for decisions among options you already know.** The split is not stylistic:
+
+| Use the question tool | Ask in prose |
+|---|---|
+| the autonomy dial (R1.3) | the user journey (R1.1) |
+| the greenfield fork (Phase 0c) | how they build a feature with AI today (R1.2) |
+| **all of Round 3** - one call, multi-select, "which of these do you want to change?" | the never-ever list (R2.1), the invariants (R2.2) |
+| the severity dial (R2.6), when the options are real | the harness questions (R2.3, R2.4, R2.5) |
+
+The prose column is not a limitation of the tool, it is the point of those questions.
+Offering options for "describe the most valuable thing a user does" replaces the answer
+you need with a menu of guesses you wrote - and that answer becomes `e2e.py`, the only
+check with real authority. A picker there is worse than no question.
 
 Round 1 - three questions decide the project, so do not let any of them slide:
 
