@@ -36,6 +36,57 @@ is not a style note:
 Where there is no such tool, ask in prose and mark the [PICKER] ones by listing the
 options with your recommendation first. Nothing here depends on the tool existing.
 
+## Two rules that apply to every question below
+
+### 1. Always carry a recommendation. Every question, including the prose ones.
+
+**Never hand someone a blank page.** A question with no proposed answer is homework; the
+same question with a draft attached is a two-second correction. This is the single biggest
+difference between an interview that finishes and one that gets abandoned in the middle.
+
+- **[PICKER]** - mark exactly one option `(Recommended)` and put it first. Say why in its
+  description, in one line.
+- **[PROSE]** - draft the answer **from their own PRD and their own repo**, show it, and
+  ask them to correct it. *"From §6 of the PRD, the journey looks like: open the app →
+  shorten a URL → follow the short link → land on the original. Is that the most valuable
+  one, and what am I missing?"*
+
+The prose rule has one hard condition: **the draft must be visibly derived from their
+material, not invented.** Cite where it came from. An invented draft anchors them onto
+your guess, which is the exact failure that makes a picker wrong for R1.1 - the difference
+is that a draft from their PRD is their own answer played back, and they will happily
+overwrite it. If you have nothing to derive a draft from, say so and ask open.
+
+Where a recommendation would be dishonest - a genuine coin-flip, or something only they
+can know - say **that** instead of inventing confidence: *"I have no basis for a
+recommendation here; it depends on X."* That is still better than silence.
+
+### 2. Offer to explain the hard parts, before they answer
+
+Several of these questions use vocabulary that is obvious only after you have built one of
+these. A user who does not want to admit they have not heard of a holdout will guess, and
+a guessed answer becomes an unenforceable rule.
+
+So **offer the explanation rather than waiting to be asked**. In a picker, add an explicit
+option - *"Explain this first"* - as a real choice; it costs one line and it is the option
+that gets picked more than you would expect. In prose, put one sentence of plain English
+in front of the question and offer to go deeper.
+
+The terms that need it, and how to say each in one breath:
+
+| Term | One breath |
+|---|---|
+| **holdout** | Tests the AI writing the code is not allowed to read, so it cannot tune its work to pass them. It is the only honest reason to merge code nobody reviewed. |
+| **mutation set** | You break the code on purpose, in specific ways, and check the tests notice. It measures your *tests*, not your code. Until you have run it you do not know your tests can fail at all. |
+| **the independence line** | The line between checks the AI can see and checks it cannot. Everything below it is inside its optimisation loop; given enough tries it satisfies those rather than the thing you meant. |
+| **the ratchet** | A floor on how many checks must run, kept in a file the AI is not allowed to edit. It stops quality being quietly traded away one deleted assertion at a time. |
+| **a structural gate** | A merge decision made by code, not by a model summarising its own work. Two of them must be code, or "it looks fine to me" is the whole gate. |
+| **the autonomy dial** | How much runs without you, 0 to 5. Level 3 is the one that matters: code merges without a human reading it. |
+| **E2E / the happy path** | One journey through your software the way a real user takes it, asserted end to end. Not a test per function - the single most valuable thing someone does. |
+
+Use those words when the user is not technical, and use the precise ones when they are.
+Do not lecture: one breath, then the question, then offer more.
+
 **Reflect every answer back as a concrete artifact** before moving on - "so the merge gate
 is: the PR merges only if `APP_STARTED` and `E2E_PASSED` both appear in the run output."
 The point of the interview is to turn opinions into things that can be written down and
@@ -186,6 +237,14 @@ Good answers sound like sequences, not properties: *"create one, restart the ser
 it still resolves"*; *"do it twice with other work in between and the answer is the same"*;
 *"what the operator reads matches what actually happened."*
 
+**Recommend three, then ask what is wrong with them.** Draft them from the PRD's own
+capability list by pairing capabilities that have to survive each other: *"from §6 I would
+propose - (1) shorten, restart the service, resolve: persistence and code generation
+agreeing across a process boundary; (2) shorten the same URL twice with other work in
+between: idempotence under interleaving; (3) a rejected URL never becomes a redirect: the
+invariant probed from several directions. Which of those is wrong, and what would you
+add?"* Almost nobody produces three of these cold. Almost everybody can correct three.
+
 **Bad answer:** a restatement of a unit test. If a single function's test would catch it, it
 is not one of these.
 
@@ -213,6 +272,13 @@ real set. Prompt with shapes if they stall:
 - an error path that silently succeeds instead of raising
 - a persistence write dropped, so everything works until a restart
 
+**Recommend a starting six, drawn from their own code or PRD**, and ask which are wrong:
+one invariant inverted, one counter frozen, one output made constant, one error path that
+returns instead of raising, one persistence write dropped, one off-by-one at a boundary -
+each named against a real function or capability of theirs, not in the abstract. Editing a
+list of six is a two-minute job; producing one from nothing is where people stall and say
+"I'll come back to it", and then the gate has never been shown to fail.
+
 Then say the thing that makes it stick: **every defect that escapes is a class of bug that
 can currently merge with nobody reading the diff.** That converts an abstract exercise into
 a list of specific holes they now want closed.
@@ -233,6 +299,11 @@ that can actually be defended. But a user who thinks the factory owns the whole 
 read a green gate as "the product is good", and it never meant that.
 
 ### [PICKER] R2.6 - "What is the one thing that, if broken, means do not merge no matter what else passed? And what would you rather ship than block on?"
+
+**Recommend the boring default and let them argue with it:** block on the app starting,
+the E2E path passing, and no protected file being touched - and ship anything else. That
+is the right answer for most projects and it is a much easier thing to disagree with than
+an empty question.
 
 Both halves together, because they are the same dial from opposite ends. The first becomes
 `FACTORY_REQUIRED_MARKERS` - a small, boring list: the app starts, the E2E path passes, no

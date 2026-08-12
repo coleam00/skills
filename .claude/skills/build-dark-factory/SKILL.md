@@ -344,6 +344,22 @@ Offering options for "describe the most valuable thing a user does" replaces the
 you need with a menu of guesses you wrote - and that answer becomes `e2e.py`, the only
 check with real authority. A picker there is worse than no question.
 
+**Two rules apply to every question, in both columns:**
+
+1. **Always carry a recommendation - never hand someone a blank page.** In a picker, mark
+   exactly one option `(Recommended)` and put it first. In prose, draft the answer **from
+   their PRD and their repo**, cite where you got it, and ask them to correct it: *"from §6
+   the journey looks like X - is that the most valuable one, and what am I missing?"* A
+   question with a draft attached is a two-second correction; the same question blank is
+   homework, and homework is where interviews get abandoned. Where a recommendation would
+   be dishonest, say *that* rather than inventing confidence.
+2. **Offer to explain the hard parts before they answer.** Holdout, mutation set, ratchet,
+   independence line, structural gate - these are obvious only after you have built one of
+   these, and a user who does not want to admit they have not heard of a holdout will
+   guess. In a picker, add an *"Explain this first"* option. In prose, lead with one
+   sentence of plain English. `interview.md` has a one-breath explanation for each term;
+   use those words, and do not lecture.
+
 Round 1 - three questions decide the project, so do not let any of them slide:
 
 1. **"Describe the single most valuable thing a user does with this app, as a
