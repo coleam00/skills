@@ -177,12 +177,18 @@ the app, existing CI, whether `gh` is authenticated, whether the repo is public,
 `.cursor/`, existing skills, commands, MCP config). That last one is the process to
 encode, and it is usually already sitting there.
 
-**FIRST, ask which of two repos this is**, because the two refusals below are written for
-one of them and misfire badly on the other:
+**Decide which of two repos this is by LOOKING - you have just inspected it. Do not ask.**
+The refusals below are written for one of them and misfire badly on the other, and the
+difference is visible in the file list:
 
-- **Brownfield** - code exists. The refusals apply as written.
-- **Greenfield** - a PRD and little else. **Both refusals are trivially true and neither
-  means anything.** Go to 0c; do not refuse.
+- **Brownfield** - source files that are not scaffolding. The refusals apply as written.
+- **Greenfield** - a PRD, maybe a `.gitignore`, `.claude/`, a README, and nothing that
+  runs. **Both refusals are then trivially true and neither carries any signal.** Go to
+  0c; do not refuse.
+
+Say which one you concluded and why, in one line, so the user can correct it: *"No source
+files outside docs/ and .claude/, so I am treating this as greenfield."* A wrong guess is
+cheap to fix and asking costs a question you already have the answer to.
 
 **Refuse, and say why, when:**
 
