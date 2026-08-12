@@ -107,3 +107,22 @@ unrelated". It is not optional.
 general assistant · a developer tool with an API · ...>.
 
 When in doubt, the answer is "that is out of scope."
+
+## What the factory does NOT own - permanently human
+
+<!--
+  THE FACTORY'S SCOPE IS SMALLER THAN THE PRODUCT'S, and saying so here is what stops a
+  green gate being read as "the product is good". It never meant that. It means the layer
+  a machine can check is intact.
+
+  These are the things no check will ever see. They are not a backlog and they are not
+  "not yet" - they are a different kind of work, and it stays with a person.
+-->
+
+- <does it FEEL right - weight, pacing, difficulty, tone>
+- <does it LOOK right - layout, hierarchy, whether two states read as different>
+- <is it UNDERSTANDABLE - can a first-time user work it out without being told>
+
+The factory owns <the simulation · the domain rules · the data model>: the layer whose
+correctness can be asserted. That is usually where most of the risk lives, and it is the
+half that can be defended. The list above is reviewed by a human, on purpose, forever.

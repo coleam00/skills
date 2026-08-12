@@ -136,6 +136,22 @@ Seven rungs, cheapest at the bottom. Build them bottom-up; they compose.
 | 2 | **unit** | the functions it just wrote behave |
 | 1 | **static** | types, lint, compiler |
 
+### The reachability constraint, and it is an architecture decision
+
+**The harness reaches software exactly three ways**: `http` (a server), `cli` (a command),
+`library` (imported and called). See `templates/harness/appproc.py`.
+
+A rendered window, a game loop, a canvas, a native UI is **none of them**. So this is not
+a preference about clean architecture, it is a precondition: **the rules have to live
+behind a headless, scriptable surface an E2E can drive.** Simulation apart from rendering,
+domain apart from view. If the logic only exists inside engine nodes and a render loop
+there is nothing to assert, and the factory cannot run at level 3 — not because the skill
+is limited but because nothing can check the work.
+
+On a **greenfield** build, say this before any code exists. It is nearly free then and it
+is a rewrite afterwards. On a brownfield one, it is the first thing to find out, because
+the answer decides whether component 5 is a week or a refactor.
+
 **`templates/harness/ci.py` implements 1, 2, 4, 6 and 7. Rung 5 is not scaffolded**, and
 saying so matters: a doc that lists a rung the scaffold does not ship reads as "you have
 this". You do not. Screenshots an `e2e.py` captures are artifacts nobody looks at until

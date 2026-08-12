@@ -37,6 +37,13 @@ unenforceable rule is worse than none: it reads like a guarantee.
 Ask these first, one at a time, before any component discussion. If someone walks away
 after three questions, these are the three you needed.
 
+> **On a greenfield repo, R1.1 is about the SKELETON, not the product.** Ask for the
+> journey the way it is written, because it defines what the product is for - then say
+> which one-slice version of it you are building first, and that everything else in it is
+> issue one, two and three. See Phase 0c. Getting this wrong is the standard greenfield
+> failure: the agent builds the MVP by hand so the harness has something to test, and the
+> factory inherits the leftovers.
+
 ### R1.1 - "Describe the single most valuable thing a user does with this app, as a sequence of actions ending in something you can see."
 
 *The* question. The answer becomes the E2E happy path, which is the only check with real
@@ -195,6 +202,21 @@ real set. Prompt with shapes if they stall:
 Then say the thing that makes it stick: **every defect that escapes is a class of bug that
 can currently merge with nobody reading the diff.** That converts an abstract exercise into
 a list of specific holes they now want closed.
+
+### R2.5c - "Which parts of this can a machine never check?"
+
+Ask it right after the two above, while the user is already thinking about what a check
+can and cannot see. **The factory's scope is strictly smaller than the product's**, and the
+gap is always the same shape: feel, presentation, readability. *"Combat feels good."* *"The
+escalation is visibly and audibly different."* *"A first-time player understands it."*
+
+None of those are machine-validatable and none ever will be. Name them, write them into
+`MISSION.md` and `FACTORY_RULES.md` as **permanently human**, and say plainly which layer
+the factory owns instead - usually the simulation, the domain, the rules.
+
+That is not a downgrade. It is usually where most of the risk lives, and it is the half
+that can actually be defended. But a user who thinks the factory owns the whole MVP will
+read a green gate as "the product is good", and it never meant that.
 
 ### R2.6 - "What is the one thing that, if broken, means do not merge no matter what else passed? And what would you rather ship than block on?"
 

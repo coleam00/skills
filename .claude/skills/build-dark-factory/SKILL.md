@@ -109,6 +109,7 @@ machine in. They are not built in that order. Build in this order instead:
 | Build | Component | Why here |
 |---|---|---|
 | 0th | *(the PRD)* | Not a component. The input. Everything below reads it, and nothing below can be written honestly without it. |
+| 0.5th | *(the walking skeleton)* | **Greenfield only.** Not a component either, and deliberately tiny: the thinnest slice that yields one assertable behaviour. Component 5 cannot be written against software that does not exist. See Phase 0c - the danger is building the MVP here rather than a slice. |
 | 1st | **Guidance layer** (#4) | An hour of markdown, and every other component reads it. Cheapest thing with the highest leverage. |
 | 2nd | **Validation harness** (#5) | The long pole. Start it before you need it, because you will be wrong about it twice. |
 | 3rd | **Workflow-driven repo** (#1) | Now the workflows have rules to obey and checks to pass. |
@@ -176,10 +177,21 @@ the app, existing CI, whether `gh` is authenticated, whether the repo is public,
 `.cursor/`, existing skills, commands, MCP config). That last one is the process to
 encode, and it is usually already sitting there.
 
+**FIRST, ask which of two repos this is**, because the two refusals below are written for
+one of them and misfire badly on the other:
+
+- **Brownfield** - code exists. The refusals apply as written.
+- **Greenfield** - a PRD and little else. **Both refusals are trivially true and neither
+  means anything.** Go to 0c; do not refuse.
+
 **Refuse, and say why, when:**
 
 - **There is no way to observe the software working** - nothing to start, nothing to
   invoke, and nothing importable either. Component 5 has nothing to stand on.
+
+  **This is about software that cannot be observed, not software that does not exist
+  yet.** A greenfield repo trips this and the next bullet by definition, and refusing it
+  would be refusing the premise rather than a defect. See 0c.
 
   **A library is not this case.** The harness ships three drivers - `http` (a server),
   `cli` (a command), and `library` (no process at all; the E2E imports it and calls it) -
@@ -196,6 +208,77 @@ encode, and it is usually already sitting there.
 Saying no here is cheaper than saying it in month two. If any of these hold, offer
 the smaller version: build the guidance layer and the harness now, and stop before
 autonomy.
+
+### 0c. Greenfield: the walking skeleton, and it is SMALL
+
+**This is the common case, not the exception.** Most people want a dark factory at the
+start of a project, which is also the best time to build one - the guidance layer is
+cheapest to write when nothing contradicts it yet, and the sim/presentation split below is
+free before there is code and expensive afterwards.
+
+Greenfield is **not** a refusal. But it does mean component 5 has nothing to stand on
+today, and no ordering of the phases fixes that. Something has to exist first.
+
+#### The skeleton is the thinnest vertical slice, NOT the MVP
+
+This is where a greenfield build goes wrong, and it goes wrong in the same direction every
+time: the agent proposes building the core of the product so the harness has something to
+test, the user agrees because it sounds necessary, and now the interesting, risky work has
+been done by hand and the factory is left with the leftovers. That inverts the entire
+point.
+
+**Build the smallest slice that produces one observable, assertable behaviour end to end.**
+For a game: one enemy, one hit, one damage number, persisted across a restart. For a
+service: one endpoint that writes one row and reads it back. For a CLI: one command with
+one flag that changes one line of output.
+
+The test is not "is this useful" - it is **"can an E2E assert something a user would
+notice?"** If yes, stop building and start building the factory. Everything else in the
+MVP is issues, and the factory building them is the thing you are here for.
+
+State the size explicitly before starting, and say what you are deliberately leaving out:
+*"I am building one horn level, one wave, one damage number and a save file. Not the
+reward curve, not the elemental interactions, not wave composition - those are issue
+one, two and three."*
+
+#### The reachability constraint, decided NOW
+
+**The harness reaches software exactly three ways** - `http` (a server), `cli` (a command),
+`library` (imported and called). Read `templates/harness/appproc.py`. A rendered window, a
+game loop, a canvas, a native UI is **none of them**.
+
+So on greenfield this stops being an architecture preference and becomes a hard
+requirement: **the logic must live behind a headless, scriptable surface that an E2E can
+drive.** Simulation separate from rendering. Domain separate from view. If the rules only
+exist inside engine nodes and a render loop, there is nothing to assert and the factory
+cannot be built at level 3 - not because the skill is limited, but because nothing can
+check the work.
+
+Say this before any code is written. It is nearly free now and it is a rewrite later.
+
+#### The factory's scope is strictly smaller than the MVP
+
+Some MVP items are not machine-validatable and never will be: *"combat feels good"*,
+*"the escalation is visibly and audibly different"*, *"a first-time player understands
+it"*. Those are feel, presentation and readability.
+
+Name them out loud, write them into `MISSION.md` and `FACTORY_RULES.md` as **permanently
+human**, and be clear that the factory owns the simulation layer rather than the product.
+That is still a large and valuable surface - usually most of the actual risk - but
+pretending it is the whole MVP is how you end up with a green factory shipping a game
+nobody wants to play.
+
+#### Then, in order
+
+1. **The skeleton** (small, above), with a test suite and one E2E that drives it.
+2. Everything else exactly as the construction order says: guidance layer → validation
+   harness → workflow repo → deployment → trigger.
+
+Offer the reduced version too, and make it a real option rather than a consolation: write
+the guidance layer and copy in the scaffolds with the contract documented and the
+assertions left empty, and let the user build the skeleton themselves. The
+`MISSION.md`/`FACTORY_RULES.md` pair is useful for interactive work whether or not a cron
+is ever turned on.
 
 ## Phase 1. Interview
 
