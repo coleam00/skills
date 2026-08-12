@@ -19,7 +19,7 @@ factory shells out to a command and reads the exit code. That is the whole inter
 
 | Agent | Headless invocation | Worth knowing |
 |---|---|---|
-| **Claude Code** | `claude -p "..." --output-format json` | `--allowedTools`, `--permission-mode`, `--max-turns`, and a hard per-invocation spend cap. A bare/CI mode exists - use it. |
+| **Claude Code** | `claude -p "..." --output-format json` | `--allowedTools`, `--disallowedTools`, `--permission-mode`, and `--max-budget-usd` as a hard per-invocation spend cap. There is **no** `--max-turns`; see the warning below. |
 | **Claude Agent SDK** | Python `claude-agent-sdk`, TS `@anthropic-ai/claude-agent-sdk` | In-process instead of shelling out. Better when you want to inspect or interject mid-run. |
 | **Codex** | `codex exec --sandbox workspace-write --ask-for-approval never` | Sandbox modes are the thing to get right. |
 | **Cline** | `cline schedule create ... --cron "0 2 * * *"` | Ships **native cron**, so part of the dispatcher is built for you. |
@@ -32,6 +32,26 @@ factory shells out to a command and reads the exit code. That is the whole inter
 CLI surfaces move, and a flag that silently changes meaning is worse than one that
 errors. Several of these CLIs do not reject unknown flags - the value falls through
 into the prompt instead - so a stale flag becomes invisible prompt injection.
+
+> **This page got it wrong, which is the best possible demonstration of why it says so.**
+> It listed `--max-turns` as a Claude Code flag. It is not one. Claude Code **accepts it,
+> ignores it, and exits 0** - so the runner passed a cost cap on every node for weeks, the
+> comments all claimed a cap was in force, and no cap ever applied. Nothing errored,
+> nothing logged, and the only reason it surfaced is that somebody ran `claude --help`.
+>
+> **A guard that silently does not apply is worse than no guard**, because you stop
+> watching the thing it was guarding. Run this before trusting any flag you write into a
+> workflow:
+>
+> ```bash
+> for f in --allowedTools --disallowedTools --permission-mode --max-budget-usd; do
+>   claude --help | grep -q -- "$f" && echo "OK $f" || echo "MISSING $f"
+> done
+> ```
+>
+> And prefer a **dollar** ceiling to a turn ceiling regardless. Turns are a proxy for cost
+> and a bad one; `--max-budget-usd` is the thing you actually care about, and it genuinely
+> enforces - the run comes back `is_error: true` when it trips.
 
 ### Choosing
 
@@ -57,6 +77,37 @@ Same four problems in every agent. None of them solve it for you.
 
 What defines "plan → implement → review → gate → merge" as steps with dependencies.
 The real commitment; changing it means rewriting every workflow.
+
+### There is one in the box
+
+`templates/runner/` is a working orchestrator of the first kind below - plain scripts,
+one machine, total transparency - lifted from a factory that runs. Copy it unless you
+have a reason not to:
+
+| file | what it is |
+|---|---|
+| `factory/config.sh` | **the only file you edit.** Agent, models, validate command, markers, dial, limits, paths |
+| `factory/orchestrator.sh` | the dispatcher: fixed priority, per-target lock, autonomy dial, stop button |
+| `factory/run-workflow.sh` | **the runner. THIS is the orchestrator** - there is no second definition of the pipeline |
+| `factory/gate.sh` | the structural gate: required markers, counts, calibration, verdict |
+| `factory/guard.py` | protected paths and the size cap. Fails **closed** |
+| `factory/merge.sh` | the merge. Code, never a model |
+| `factory/deploy.sh` | poll, health-check, swap, rollback |
+| `factory/state.py` + `gh_backend.py` | the transition table, and GitHub labels as state |
+| `factory/tripwire.py` · `cost.py` · `node_failure.py` | holdout tripwire, token instrumentation, why-a-node-failed |
+| `factory/prompts/*.md` | the seven nodes. **The interview's output - rewrite these** |
+
+**Two definitions of one pipeline is one too many.** That repo carried YAML DAG
+definitions alongside the bash for a while, on the theory that an engine would run them.
+Nothing did, so they drifted - and what they drifted into was a `deny_paths` entry that
+made the holdout read-block look enforced when the only thing enforcing it was a sentence
+in a prompt. **A stale spec that invents a safety property is worse than no spec**, and
+the one nobody runs is always the one that drifts. Pick one definition.
+
+If you are bringing your own engine, the runner is still the reference for *what each node
+must do*: fresh context per node, tool allowlists, the holdout deny passed to the agent,
+an explicit commit step, the guard from the root checkout, governance from the base
+branch. Port the properties, not the bash.
 
 | Option | Shape | Good when | Cost |
 |---|---|---|---|

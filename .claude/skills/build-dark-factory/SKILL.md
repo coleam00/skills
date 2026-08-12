@@ -7,13 +7,19 @@ arguments: [prd, repo]
 
 # Build a dark factory
 
-**PRD:** $prd
-**Repo:** $repo
-**Raw input as typed:** $ARGUMENTS
+**What the user typed:** $ARGUMENTS
 
-> If those two do not look like two paths, read the raw input instead. An unquoted
-> path containing a space splits into two arguments. If only one path was given,
-> work out from its extension which one it is, and ask for the other.
+> **Work out the PRD path and the repo path from that line yourself, and do not print a
+> parse you have not checked.** The positional split is on whitespace, so anyone who
+> types a sentence ("build a dark factory for my repo at C:\code\thing") gets the first
+> two *words* as the two paths - three separate test runs opened with `PRD: Build` and
+> `Repo: a`, which is a broken-looking first contact for a parse the skill then quietly
+> recovered from anyway.
+>
+> So: read the line, find the thing that looks like a `.md` PRD and the thing that looks
+> like a directory, and confirm both back to the user as one sentence before Phase 0. If
+> only one is given, work out from its extension which it is and ask for the other. If
+> the PRD path does not exist, say so and stop - that is Phase 0a, reached early.
 
 A dark factory is a repository where work goes in one end and shipped code comes out
 the other, and there is no human in between. Work arrives as an issue. Workflows plan
@@ -50,31 +56,25 @@ worth keeping, and a generic interview would be a downgrade. If the user has no
 approach yet, point them at the `plan-create-prd` skill in this same repo and come
 back when they have a file.
 
-## What this costs, before you start it
+## Two things that shape every decision below
 
-**Say this to the user in your first message, before the interview.** Typing one command
-should not silently begin a multi-hour job.
+<!-- NO COST OR DURATION ESTIMATES IN THIS FILE, and none in the opening message. They
+     used to be a table here that the skill was told to recite before the interview, and
+     every run opened by quoting figures at someone who had just asked for a dark factory.
+     People know a build like this takes a while and costs something; being warned about
+     it reads as hedging, and it buries the first useful sentence. Do not reintroduce
+     them. (Also: never write a `$` followed by a digit in this file - it renders as a
+     positional argument substitution and silently eats the surrounding text.) -->
 
-Measured on a real end-to-end build (a small Python game repo, local git, Claude Code):
+- **Cached reads dominate cost by orders of magnitude over output.** Context size drives
+  the bill far more than how much the agent writes, which is why the premium model belongs
+  in the planning slot and a cheaper one everywhere else.
+- **Refusing is cheap and building is not.** If Phase 0 is borderline, refuse. Building
+  the wrong factory is discovered in month two, and it cannot be patched by a better
+  prompt.
 
-| | |
-|---|---|
-| Interview | 10 to 20 minutes of the user's attention, in bursts |
-| Building components 1 to 5 | **about 3 hours** of agent time and **roughly $50** |
-| Each issue the factory then runs | **$6 to $8**, before any fix cycle |
-| A Phase 0 refusal | under a minute and well under a dollar |
-
-Two things follow from those numbers and both are worth saying out loud:
-
-- **Cached reads dominate cost by two orders of magnitude over output.** Context size
-  drives the bill far more than how much the agent writes, which is why the premium model
-  belongs in the planning slot and a cheaper one everywhere else.
-- **Refusing is cheap and building is not.** If Phase 0 is borderline, refuse. The user
-  loses a minute. Building the wrong factory costs them an afternoon and fifty dollars,
-  and they find out in month two.
-
-Offer to stop after the guidance layer if the user wants a smaller first commitment. That
-alone is about an hour and it is useful even if they never turn a cron on.
+Offer to stop after the guidance layer if the user wants a smaller first commitment. It is
+useful even if they never turn a cron on.
 
 ## Before anything else: the three harnesses
 
@@ -83,12 +83,21 @@ People conflate these and then cannot debug them. Name them once, out loud, earl
 | Harness | What it is | Who builds it |
 |---|---|---|
 | **The agent harness** | Claude Code, Codex, Pi - the loop that turns a prompt into edits | Vendor. Not your problem. |
-| **The factory harness** | how work is planned, implemented, reviewed, gated, merged | **You.** Components 1-4. |
+| **The factory harness** | how work is planned, implemented, reviewed, gated, merged | **`templates/runner/`.** Components 1-4, mostly copied. |
 | **The validation harness** | the tools the agent uses to check its own work *as a user would* | **You, and it is most of the work.** Component 5. |
 
 The factory harness decides what runs. The validation harness decides whether what
 ran was worth keeping. Confusing the two is why people build an impressive DAG that
 ships broken software on schedule.
+
+That distinction is also what decides which parts of this ship as a template:
+
+> **The factory harness is templatable. The validation harness is not.**
+
+The dispatcher, the runner, the gate, the guard, the merge and the state machine are the
+same in every factory, so they are in `templates/runner/` with their scars intact. What
+"working" means for this app is the one thing nobody can write in advance, so component 5
+is yours - and it is where the week should go.
 
 ---
 
@@ -169,8 +178,16 @@ encode, and it is usually already sitting there.
 
 **Refuse, and say why, when:**
 
-- **There is no way to observe the app working.** A library with no runnable surface
-  and no test suite has nothing for component 5 to stand on. Fix that first.
+- **There is no way to observe the software working** - nothing to start, nothing to
+  invoke, and nothing importable either. Component 5 has nothing to stand on.
+
+  **A library is not this case.** The harness ships three drivers - `http` (a server),
+  `cli` (a command), and `library` (no process at all; the E2E imports it and calls it) -
+  and `APP_STARTED driver=library` means the import succeeded, which is the same claim a
+  server answering makes. This bullet used to open with the words "a library", and a test
+  run against a pure Python library nearly hard-refused a repo the scaffold supports out
+  of the box. Read `templates/harness/appproc.py` before deciding something is
+  unobservable.
 - **The repo has no CI and no test command at all.** Start with a test suite. A dark
   factory built on zero checks is a machine for merging plausible code.
 - **The user wants the agent to touch auth, payments, or anything with a blast
@@ -182,20 +199,33 @@ autonomy.
 
 ## Phase 1. Interview
 
-Read `references/interview.md` and work through it. It is the whole skill in
-question form: what each question is actually for, what a good answer sounds like,
-and which vague answers to push back on.
+Read `references/interview.md` and work through it. It is the whole skill in question
+form: what each question is actually for, what a good answer sounds like, and which
+vague answers to push back on.
 
-Do not batch all questions into one message. Go component by component, and reflect
-each answer back as a concrete artifact ("so the merge gate is: X") before moving on.
+**It is three rounds, not a questionnaire.** Round 1 is the three questions below, asked
+one at a time before anything else. Round 2 is six that only the user can answer. Round 3
+is a **single message** listing every remaining setting with its default already filled
+in, asking what to change.
 
-**The PRD has already answered part of this.** Do not re-ask what it answers. Read the
-scope and the non-goals back as a proposal - *"so triage accepts anything in these
-four areas and rejects these six, correct?"* - and spend the time on what it left
-open. Re-asking a question the user already answered in writing is how an interview
-loses the room in the first two minutes.
+**Propose defaults; do not interrogate.** The protected paths, the poll interval, the
+concurrency, the stop button, the PR cap, the model routing and the holdout location all
+have working defaults that ship in `config.sh` and the templates. Asking for them
+open-ended makes the user do the skill's homework and buries the questions that matter.
+"I am going to protect these five paths, plus your CI config - anything else?" is a better
+question than "which files must the agent never touch?", and it cannot be answered wrong
+by someone who has never built one of these.
 
-Three questions decide the project, so do not let any of them slide:
+**The PRD has already answered part of this.** Never re-ask what it answers. Read the
+scope and the non-goals back as a proposal - *"so triage accepts anything in these four
+areas and rejects these six, correct?"* - and spend the time on what it left open.
+Re-asking something the user already wrote down is how an interview loses the room in the
+first two minutes.
+
+Reflect each answer back as a concrete artifact ("so the merge gate is: X") before moving
+on.
+
+Round 1 - three questions decide the project, so do not let any of them slide:
 
 1. **"Describe the single most valuable thing a user does with this app, as a
    sequence of actions ending in something you can see on a screen."** That sequence
@@ -206,8 +236,10 @@ Three questions decide the project, so do not let any of them slide:
    step, the skills and MCP servers and rules files each one uses. The factory's
    workflows should be recognisably their process with the approvals taken out, not a
    generic pipeline they have to learn.
-3. **"What level of autonomy do you actually want?"** Use the dial below. Most people
-   say 5 and mean 3.
+3. **"What level of autonomy do you actually want?"** Use the dial below. **Recommend
+   level 3, and build for it unless they say otherwise.** People often say 5; 5 means
+   the factory writes its own issues from the mission, which is a different product
+   decision and not the one they are asking for.
 
 ### The autonomy dial
 
@@ -220,9 +252,26 @@ Three questions decide the project, so do not let any of them slide:
 | 4 | + it triages its own issues, and a scheduled test files its own bugs | write the important issues |
 | 5 | + it writes its own issues from the mission | nothing |
 
-Build to level 1, prove it, then raise the dial one notch at a time. **Level 3 is the
-real threshold** - it is the first level where code merges without a human reading it,
-and it is the level the entire validation harness exists to justify.
+**Level 3 is the default. Build for it.**
+
+It is the first level where code merges without a human reading it, and it is the whole
+point: a factory that stops at 2 is a code generator with a queue, and the person is still
+the bottleneck they were trying to remove. Everything difficult in this build - the
+holdout, the mutation set, the ratchet, the two gates that must be code - exists to earn
+level 3, so building for anything less means doing the hard part and then not using it.
+
+Levels 0 to 2 are **stages on the way**, not destinations. Ship them in order, prove a lap
+at each, and keep going to 3. The dial is enforced in `orchestrator.sh` and
+`factory_doctor` blocks 3 outright until a holdout exists, so "build for 3" cannot turn
+into "switch on 3" before the evidence is there.
+
+Stop below 3 only when the user has a specific reason - an unmovable review requirement, a
+blast radius they cannot absorb, a harness they do not yet trust. That is a legitimate
+choice and it should be their choice, made out loud, rather than the default that happens
+because nobody raised the dial.
+
+Above 3 is a different question, not a further step: 4 hands over what gets built and 5
+hands over what to build. Neither is implied by wanting the merge automated.
 
 ## Phase 2. The guidance layer (component 4)
 
@@ -231,6 +280,8 @@ Read `references/guidance-layer.md`. Write three files from the templates:
 - `MISSION.md` - what is being built, and what is **deliberately out of scope forever**
 - `FACTORY_RULES.md` - how the agent behaves unsupervised, and the protected list
 - `CLAUDE.md` / `AGENTS.md` - the conventions any project has, factory or not
+  (template in `templates/CLAUDE.md`; if one already exists, split it rather
+  than replacing it)
 
 **`MISSION.md` is a compression of the PRD, not a new document.** Draft it from the
 PRD directly and show the user the diff in meaning, not just the file. The PRD's
@@ -258,7 +309,41 @@ correct - it is a checklist, and this is the start of working through it.
 ## Phase 3. The validation harness (component 5)
 
 Read `references/validation-harness.md` in full before writing anything. It is the
-longest reference because this is where factories actually fail.
+longest reference because this is where factories actually fail. **Its opening section
+is the contract the runner expects** - the entrypoint, the markers, the append rule, and
+the `--quick` subset. Read that even if you skim the rest, because getting the append
+rule wrong breaks every marker assertion for a reason that looks like your code.
+
+**Start from the scaffold, then delete its assertions.**
+
+```bash
+cp -r templates/harness <repo>/harness
+```
+
+`templates/harness/` is the plumbing, and only the plumbing. **It is not
+Python-only and not web-only**: every command lives in `harness.config.json`,
+and the driver is `http`, `cli` or `library`. Proven on a Python HTTP service, a
+Node CLI (five config values changed, nothing else) and a Python library.
+
+What it gives you: the step ladder, the markers
+with counts, the step-namer, the `--quick` subset, and an app-process manager that binds
+a dynamic port, waits for health and tears down on every path. It runs out of the box.
+
+That split is not a hedge, it is the finding. Two people built this harness from scratch
+without a scaffold, independently, on different products, and wrote the *same* file -
+down to both inventing a "zero tests discovered is not a pass" guard. The plumbing is
+determined by the marker contract, not by the app.
+
+**Every assertion in `e2e.py` is a worked example and all of it should be deleted.**
+The same goes for `.factory/holdout/run.py` and `harness/mutations/defects.json`.
+Each carries a marker line you delete when the content becomes yours, and
+`factory_doctor` **blocks at level 2+** until you do - because a gate that is green
+about the template's sample product is worse than no gate at all.
+
+The interview produces all three: **R1.1** the journey, **R2.5a** the composed
+scenarios the builder cannot read, **R2.5b** the defects that must be caught. What
+a user would notice is the part nobody can write for you, it is the answer to R1.1, and
+it is where the week goes. The scaffold buys you the day; it does not buy you the week.
 
 The short version, which is not a substitute for reading it:
 
@@ -280,23 +365,40 @@ markers, and a merge gate in bash that greps for them.
 
 ## Phase 4. The workflow-driven repo (component 1)
 
-Read `references/automation.md` for the headless contract of each agent and how to
-pick an orchestrator.
+Read `references/automation.md` for the headless contract of each agent and what is in
+the runner.
 
-Pick **one** coding agent and **one** orchestrator. They are separate choices and the
-user usually conflates them. The agent is genuinely swappable - every one of them
-takes a prompt, runs headless, and returns an exit code. The orchestrator is not.
+**Copy the runner; do not write one.** `templates/runner/factory/` is a working
+execution layer - dispatcher, runner, structural gate, protected-path guard, merge,
+deploy, state machine, seven node prompts. Its `README.md` is the install order.
 
-Write the workflows the factory needs. Minimum viable set is three: **implement an
-issue**, **validate a PR**, **fix a PR**. Triage is a fourth and it is optional until
-other people can file issues.
+```bash
+cp -r templates/runner/factory <repo>/factory
+mkdir -p <repo>/.factory/{locks,holdout,runs}
+```
 
-**Build these out of the process the user described in Phase 1, not out of a blank
-page.** If they plan with one skill and implement with another, those are two nodes.
-If a rules file or an MCP server is loaded at a particular step today, load it at that
-step here. The interesting property of a factory is that it runs unattended, not that
-it works differently, and a user who recognises their own workflow in the YAML will
-trust it and maintain it. One that has to learn a new pipeline will not.
+Then three edits, and the third is the real work of this phase:
+
+1. **`factory/config.sh`** - the agent, the models, and `FACTORY_VALIDATE_CMD` pointing
+   at the harness from Phase 3. Every project-specific value lives here; if you are
+   editing another script to change a path, that is a bug in `config.sh`.
+2. **`factory/guard.py`** - the protected list. Seed it, do not just accept what the
+   interview returned.
+3. **`factory/prompts/*.md`** - **rewrite these as the user's own process.** This is
+   where Phase 1's R1.2 answer lands. If they plan with one skill and implement with
+   another, those are two nodes. If a rules file or an MCP server is loaded at a
+   particular step today, load it at that step here.
+
+The interesting property of a factory is that it runs unattended, not that it works
+differently. A user who recognises their own workflow in these prompts will trust it and
+maintain it; one who has to learn a new pipeline will not. **The prompts are the
+personalisation. The plumbing is not** - and that is exactly why the plumbing ships as a
+copy and the prompts ship as a skeleton with the decisions marked.
+
+If the user has a workflow engine they already run (Archon, a YAML DAG, GitHub Actions,
+an Agent SDK program), the runner is still the reference for *what the nodes must do* -
+the fresh-context boundary, the tool allowlists, the holdout deny, the commit step, the
+gate. Port those properties; do not port the bash.
 
 ## Phase 5. Deployment (component 3)
 
@@ -309,7 +411,39 @@ If the loop does not end at real users, the user has built a PR generator.
 
 ## Phase 6. The trigger (component 2)
 
-Only now. Read the automation reference's dispatcher section.
+Only now. Read `references/setup.md` in full and the automation reference's dispatcher
+section.
+
+`references/setup.md` is the unglamorous half nobody writes down: prerequisites, cron and
+systemd and Task Scheduler, the `.gitattributes` line-ending pin, `core.longpaths`,
+`PYTHONIOENCODING`, the `git check-ignore` pre-flight, credential expiry, and how to test
+the stop button on purpose. Every item on it broke a real factory. You can have five
+perfect components and a machine that has never completed a lap because line endings were
+rewritten on checkout.
+
+The dial itself is already enforced in the runner: `orchestrator.sh` reads
+`FACTORY_AUTONOMY` and refuses each action below its level, so raising it is a deliberate
+act rather than a note in a file.
+
+**Say this out loud, because almost everyone arrives with the wrong model: nothing
+pushes.** Filing an issue does not trigger a run. There is no webhook and there is not
+meant to be one - a scheduler wakes on a timer, reads the state, and dispatches at most
+one thing. An issue filed at 09:01 waits for the next tick. A push trigger that breaks
+fails *silently* and looks exactly like a factory with nothing to do; a poll that breaks
+is a poll you can see not running.
+
+Arm it with the installer rather than by hand, and note that it **refuses while the dial
+is at 0** - a scheduler at level 0 wakes up forever and correctly does nothing, which is
+how people convince themselves a factory is running when it has never completed a lap:
+
+```bash
+bash factory/install-trigger.sh --status     # what is armed right now
+bash factory/install-trigger.sh --install    # cron, systemd timer, or Task Scheduler
+bash factory/install-trigger.sh --remove
+```
+
+Then run `factory_doctor` once more. It now checks whether a scheduler is actually armed,
+because a fully built factory with nothing scheduled audits identically to a running one.
 
 **The dispatcher must be the dumbest, most deterministic thing in the system.** Not an
 LLM deciding what to run - that hallucinates dispatches for work that does not exist.
@@ -326,13 +460,21 @@ Fixed priority, and this order is load-bearing:
 **Finish in-flight work before starting new work.** Backwards, and the factory
 triages forever while its own PRs rot.
 
-## Phase 7. Prove it, then raise the dial
+## Phase 7. Prove it, then get to level 3
+
+**The target is 3 and the job is not finished until the dial is there.** These steps are
+the evidence that earns it, not a ladder to stop partway up.
 
 1. Run the walking skeleton by hand: one real issue, all the way to a PR you merge
    yourself. Do not proceed on a factory that has never completed a lap.
-2. `python scripts/factory_doctor.py --repo <path> --audit` until it is clean.
-3. Raise the autonomy dial one notch. Watch one full cycle at that level before the
-   next notch.
+2. `python scripts/factory_doctor.py --repo <path> --audit` until it is clean. It refuses
+   level 3 while there is no holdout, which is the check that decides whether the rest of
+   this was real.
+3. Raise the dial to 1, then 2, watching one full cycle at each - then **raise it to 3**.
+   Stopping at 2 leaves a person merging every PR, which is the bottleneck the whole build
+   was for. If the user chooses to stop below 3, write down in `FACTORY.md` what would
+   have to be true to go further, so it is a decision with a way out of it rather than a
+   dial nobody touched again.
 4. Write `FACTORY.md` from the template - what was built, at which level it currently
    runs, and what has to be true before the next notch. **Link the PRD it was built
    from**, because when the product changes the mission has to change with it, and the
@@ -373,8 +515,22 @@ triages forever while its own PRs rot.
   options and trade-offs, and the dispatcher rules. Read in Phases 4 and 6.
 - `references/deployment.md`: deploy strategies, the `GITHUB_TOKEN` trap, and the
   GitHub scheduling gotchas. Read in Phase 5.
-- `templates/`: `MISSION.md`, `FACTORY_RULES.md`, `orchestrator.sh`, `validate-gate.sh`,
-  `FACTORY.md`. Copy and fill; never ship a template's placeholder text.
+- `references/setup.md`: prerequisites, the platform tax, scheduling, and turning it on.
+  Skim in Phase 0b to refuse early; read in full in Phase 6.
+- `templates/`: `MISSION.md`, `FACTORY_RULES.md`, `FACTORY.md`. Copy and fill; never ship
+  a template's placeholder text. There is no separate `orchestrator.sh` or
+  `validate-gate.sh` sketch any more - they were strictly worse duplicates of the real
+  ones in `templates/runner/factory/`, and shipping a second definition of the pipeline is
+  the exact failure `automation.md` warns about. The one nobody runs is the one that
+  drifts.
+- **`templates/runner/`**: the working execution layer, ~3,000 lines, copied into the
+  repo in Phase 4. Read its `README.md` for the install order and the list of things that
+  are load-bearing. Its comments record real incidents - a factory rebuilt from the design
+  alone rediscovers every one of them, unattended, in production.
+- **`templates/harness/`**: the validation harness's *plumbing*, copied in Phase 3. Runs
+  out of the box; every assertion in it is an example to delete. The factory harness is
+  templatable and so is the harness's plumbing - what is not templatable is what "working"
+  means for this product, and that is the whole of component 5.
 - `scripts/factory_doctor.py`: deterministic audit of a factory repo - protected
   files, holdout leaks, gate-is-code, empty-is-not-pass, ignored secrets, autonomy
   level. Run it in Phases 2 and 7. Never read its source into context; only its output.

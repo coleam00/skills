@@ -44,6 +44,27 @@ This split is often the most useful single edit made to an existing repo, and it
 off whether or not the user ever turns the cron on: a conventions file that only holds
 conventions is a better conventions file for interactive work too.
 
+### If CI already exists, READ IT before writing the gate
+
+Noticing that `.github/workflows/` exists is not the same as reading it, and only the
+first was happening: a test run passed Phase 0 on the strength of "there is CI", protected
+`.github/`, and never once opened the file. The CI already asserted something the merge
+gate was about to re-implement from scratch, and nobody noticed.
+
+So open it. Two things come out:
+
+- **Commands you do not have to invent.** Whatever CI runs for lint, types and tests is a
+  tested answer to `static` and `unit` in `harness.config.json`. Reuse it rather than
+  writing a second definition that drifts from the first.
+- **Assertions that already exist.** If CI enforces something real - a dependency ban, a
+  coverage floor, a schema check - that is a rung you already have. Say so, and spend the
+  time on the rungs above the independence line instead.
+
+Then say which one is authoritative. The factory's gate is what decides a merge, so if CI
+and the gate disagree the gate wins - but a CI that stays red while the factory merges
+happily is a contradiction someone will trip over. Either point CI at
+`FACTORY_VALIDATE_CMD` so there is one definition, or write down that CI is advisory here.
+
 ---
 
 ## The property that matters

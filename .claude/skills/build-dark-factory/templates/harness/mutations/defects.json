@@ -1,0 +1,92 @@
+{
+  "_what_this_is": [
+    "Deliberate defects injected into REAL source on a throwaway copy. Each must make",
+    "the gate go red. One that escapes is a class of bug that can currently merge with",
+    "nobody reading the diff.",
+    "",
+    "THIS FILE IS PROTECTED. A builder that can edit its own defect set can pass it."
+  ],
+  "_how_to_write_one": [
+    "id      a name that says what broke, not which line changed",
+    "file    path relative to the repo root",
+    "find    an exact snippet from that file. Keep it SHORT and distinctive - a long",
+    "        anchor breaks the moment anyone reformats, and a broken anchor is reported",
+    "        as NOT_INJECTED rather than silently passing",
+    "replace what to put there instead",
+    "why     what it would mean if this escaped. You write this before you know whether",
+    "        it does, and it is the sentence you will read when it escapes"
+  ],
+  "_start_here": [
+    "Six or seven is a real set. Aim at the seams, not at syntax:",
+    "  - an invariant inverted        (a comparison flipped)",
+    "  - a counter that stops moving  (the value exists, never changes)",
+    "  - an output made constant      (always the same answer)",
+    "  - an error path that succeeds  (the guard returns instead of raising)",
+    "  - a persistence write dropped  (works until a restart)",
+    "  - an off-by-one at a boundary  (right on average, wrong at the edge)",
+    "",
+    "If the product has a screen, add these three. Every archetype above is",
+    "logic-shaped, so a set built only from them never exercises the rungs a",
+    "browser exists for - and all three below are one-line find/replace edits",
+    "in CSS or a template, which the runner handles the same as any other:",
+    "  - a colour that stops tracking state  (the class is set, the value is fixed)",
+    "  - an element that stays visible       (the hide is removed; the data is still right)",
+    "  - a computed dimension pinned         (a width/position hardcoded, not derived)"
+  ],
+
+  "_scaffold": "SCAFFOLD_EXAMPLE_DELETE_THIS_LINE_WHEN_YOU_WRITE_YOUR_OWN",
+
+  "defects": [
+    {
+      "_lesson": [
+        "The FIRST version of this defect was a no-op. It referenced a local that does",
+        "not exist yet at that point in the function, so the expression evaluated to 0",
+        "and the hash was unchanged - the defect injected perfectly and changed nothing,",
+        "and was reported as CAUGHT because the gate went red for an unrelated reason.",
+        "",
+        "A defect you have not watched change behaviour is a defect that proves nothing.",
+        "Prefer the simplest possible mutation with an obvious effect."
+      ],
+      "id": "codes-are-not-deterministic",
+      "file": "app/store.py",
+      "find": "        h = 0\n",
+      "replace": "        import random\n        h = random.randrange(1 << 40)\n",
+      "why": "idempotence is a hard invariant; if this escapes, the same URL silently yields two codes and nothing notices"
+    },
+    {
+      "id": "hits-never-increment",
+      "file": "app/store.py",
+      "find": "self._hits[code] = self._hits.get(code, 0) + 1",
+      "replace": "self._hits[code] = self._hits.get(code, 0)",
+      "why": "a counter that exists and never moves - the shape of defect an assertion that only checks presence cannot see"
+    },
+    {
+      "id": "nothing-is-persisted",
+      "file": "app/store.py",
+      "find": "os.replace(tmp, self.path)",
+      "replace": "pass",
+      "why": "everything works until a restart; only a scenario that crosses a process boundary catches it"
+    },
+    {
+      "id": "bad-scheme-is-accepted",
+      "file": "app/store.py",
+      "find": "raise ValueError(\"url must be http or https\")",
+      "replace": "url = \"https://\" + url.split(\"://\", 1)[-1]",
+      "why": "an error path that silently succeeds instead of raising - a security invariant turned into a coercion"
+    },
+    {
+      "id": "unknown-code-redirects-anyway",
+      "file": "app/server.py",
+      "find": "return self._send(404, json.dumps({\"error\": \"unknown code\"}))",
+      "replace": "return self._send(302, \"\")",
+      "why": "the unhappy path stops being unhappy; a suite that only tests the happy path never notices"
+    },
+    {
+      "id": "health-always-reports-zero",
+      "file": "app/server.py",
+      "find": "\"links\": self.store.count()",
+      "replace": "\"links\": 0",
+      "why": "an output made constant. The endpoint answers, the shape is right, the number is a lie"
+    }
+  ]
+}
