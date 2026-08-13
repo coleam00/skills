@@ -349,6 +349,32 @@ That is not a downgrade. It is usually where most of the risk lives, and it is t
 that can actually be defended. But a user who thinks the factory owns the whole MVP will
 read a green gate as "the product is good", and it never meant that.
 
+### [PROSE] R2.5d - "What is the factory allowed to decide on its own and show you, and what must it stop and ask about first?"
+
+**This question sets how much work the factory refuses**, and the default answer is
+already written: it decides **product** values (a price, a rate, a default, a name),
+records what it chose, and the merge is held for you. It never decides **judgement**
+values - a lock, a floor, a tolerance, a sample size, a mutation - because choosing those
+is tuning the judge.
+
+So do not ask this open. **Propose that split, and ask only for the additions to the stop
+list**: *"beyond changing the checks themselves, what would you want it to stop and ask
+about rather than build and show you?"*
+
+What you are collecting is `FACTORY_RULES.md` §7.3, the **irreversible list** - the
+changes a revert does not undo. Schema migrations, anything touching money, auth and
+secrets, a side effect that leaves the building. Take their list, and push back on length
+in one direction only: **everything on it costs throughput, and everything missing from it
+costs more than throughput.** A short list they believe in beats a long list they wrote to
+feel safe.
+
+The failure this prevents is specific and it is the common one. An earlier version told
+the plan node to stop for "an answer to any MISSION open question", so a PRD that was
+honest about what it had not settled blocked every issue downstream of it - four issues,
+four escalations, zero PRs, and the same question asked four times. **The more honest the
+PRD, the less the factory could do.** Say that out loud when you ask this, because a user's
+instinct is to make the stop list long.
+
 ### [PICKER] R2.6 - "What is the one thing that, if broken, means do not merge no matter what else passed? And what would you rather ship than block on?"
 
 **Recommend the boring default and let them argue with it:** block on the app starting,

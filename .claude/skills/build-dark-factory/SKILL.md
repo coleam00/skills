@@ -161,7 +161,7 @@ Read the PRD at `$prd` in full before asking a single question. Then map it:
 | MVP scope, the capability areas | what triage is allowed to accept |
 | **non-goals** | **`MISSION.md` out-of-scope-forever, the most load-bearing list in the whole build** |
 | success metrics | what the validation harness is ultimately arguing about |
-| open questions, anything marked TBD | escalate as `needs-human`; never let the factory guess |
+| open questions, anything marked TBD | a decision to be **proposed**, not a wall. The factory picks a defensible value, records it, and the merge is held for a human. It escalates only for the short list in `FACTORY_RULES.md` §7.2 - read "open" as "I have not decided", never as "you may not propose" |
 
 And be explicit with the user about **what the PRD does not give you**, because these
 are exactly what the interview exists to produce:

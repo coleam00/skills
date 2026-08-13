@@ -39,9 +39,32 @@ value cannot be observed by the harness. Cite the entry by its `OS` number or in
 For MISSION OS9 specifically - unobservable value - the correct response is not a flat no.
 It is: *make it observable first, then it is in scope.* Say that, so the filer has a path.
 
-**`needs-human`** - requires answering a MISSION open question, above all any locked value;
-or asks to weaken the harness in any way (§2.1); or would need a protected file touched; or
-is in scope but ambiguous in an *interesting* way.
+**`needs-human`** - and this is a SHORT list on purpose. Only:
+
+- it would require changing a **locked value**, a floor, a tolerance, a sample size, a
+  mutation or a required marker - anything that decides what counts as passing;
+- it asks to weaken the harness in any way (§2.1);
+- it would need a **protected file** touched;
+- it would change a **MISSION invariant**, or contradicts one;
+- its blast radius is on the **irreversible list** in `FACTORY_RULES.md`.
+
+**An open question in MISSION or the PRD is NOT on that list.** An unspecified product
+value - a price, a rate, a default, a name - is a thing the plan node decides and records;
+the merge is then held for a human, so nothing ships unreviewed and nothing stops. Accept
+it. Ambiguity you can resolve defensibly is not a reason to refuse work either: accept,
+and say in the note which reading you took.
+
+Before marking anything `needs-human`, check `.factory/decisions.md`. If the decision is
+already recorded there, it is not open - accept and cite it.
+
+**Also check whether this issue is really new work:**
+
+- **Subsumed by another open issue?** Say so, name the issue, and mark it `rejected` with
+  that citation rather than building the same mechanism twice. (A human should not have to
+  write "check whether #5 already fixes this" into the issue body, as one did.)
+- **Blocked by another issue rather than by a human?** That is an ordering fact, not an
+  escalation. Accept it, and name the dependency in the note so the plan node builds the
+  prerequisite first or leaves a follow-up.
 
 ## The asymmetry on harness work
 

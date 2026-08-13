@@ -323,12 +323,41 @@ case "$WORKFLOW" in
     ) || { git worktree remove "$WT" --force >/dev/null 2>&1 || true
            escalate "$(cat "$RUNDIR/NODE_FAILURE" 2>/dev/null || echo 'a build node failed, reason not recorded')"; }
 
-    # An explicit escalation file beats a silent no-op. The plan node is told to stop and
-    # escalate rather than invent a locked value (FACTORY_RULES.md 3.1); when it does, it
-    # says so here, and this is the only path that turns that into a state change.
+    # An explicit escalation file beats a silent no-op. The plan node stops only for the
+    # short list in prompts/plan.md; when it does, it says so here, and this is the only
+    # path that turns that into a state change.
     if [ -s "$RUNDIR/ESCALATE" ]; then
       git worktree remove "$WT" --force >/dev/null 2>&1 || true
       escalate "$(head -c 800 "$RUNDIR/ESCALATE")"
+    fi
+
+    # ASSUMPTIONS ARE NOT ESCALATIONS. They ride through the build and hold the MERGE.
+    #
+    # THE FAILURE THIS REPLACES. The plan node used to be told to stop for "an answer to
+    # any other MISSION open question", so one unmade product decision blocked every issue
+    # downstream of it. Four issues filed against one game produced four escalations, zero
+    # PRs, and the SAME question asked four times - because an open question in a PRD was
+    # being read as "you may not propose" when the author meant "I have not decided". The
+    # more honest the PRD, the less the factory could do.
+    #
+    # Now the node decides, records what it assumed, and builds. The assumption travels
+    # into the PR record and `gate.sh` refuses the AUTO-merge on it - the same mechanism
+    # that already holds a merge on an uncalibrated threshold. So the work is built,
+    # validated, and waiting with the reasoning at the top, and the human answers a
+    # concrete question about a running thing rather than an abstract one in the dark.
+    if [ -s "$RUNDIR/ASSUMPTIONS" ]; then
+      mkdir -p .factory/assumptions
+      cp "$RUNDIR/ASSUMPTIONS" ".factory/assumptions/$ISSUE_ID.txt" 2>/dev/null || true
+      log "ASSUMPTIONS_RECORDED $(grep -c . "$RUNDIR/ASSUMPTIONS" 2>/dev/null || echo 0) - the build continues; the MERGE will be held"
+      sed 's/^/    /' "$RUNDIR/ASSUMPTIONS" | head -20
+    fi
+
+    # A follow-up the node could not build, from an issue it mostly could. Recorded rather
+    # than lost: partially building an issue is right, silently dropping the rest is not.
+    if [ -s "$RUNDIR/FOLLOWUP" ]; then
+      mkdir -p .factory/followups
+      cp "$RUNDIR/FOLLOWUP" ".factory/followups/$ISSUE_ID.md" 2>/dev/null || true
+      log "FOLLOWUP_RECORDED .factory/followups/$ISSUE_ID.md - part of this issue was deliberately left"
     fi
 
     # COMMIT. Without this the whole lap is theatre: the implement node edits files in

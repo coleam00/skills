@@ -171,6 +171,36 @@ if [ "$UNCAL" -gt 0 ]; then
   echo "GATE_NOTE: autonomy is capped at level 2 - verdict recorded, auto-merge refused."
 fi
 
+# --- 3b. an assumption holds the MERGE, it does not stop the WORK -------------
+#
+# The same mechanism as above, pointed at the other thing a factory should not decide
+# alone. The plan node is told to choose unspecified PRODUCT values rather than stop -
+# a price, a rate, a default - and to write what it chose to ASSUMPTIONS. That file
+# arrives here, and the only consequence is that this particular PR waits for a human.
+#
+# Why hold rather than escalate: the work is built, validated and readable, so the human
+# is answering "is 1.5 the right multiplier, here is what it does" instead of "what should
+# the multiplier be" with nothing in front of them. Everything WITHOUT an assumption still
+# auto-merges at level 3, so one open product question no longer stops the queue.
+#
+# JUDGEMENT values are not covered by this and never will be: a lock, a floor, a
+# tolerance, a sample size, a mutation. Choosing one of those is tuning the judge, and the
+# plan node escalates instead. That distinction is the whole safety argument.
+ASSUMPTION_FILE=".factory/assumptions/$(basename "${PR_FILE%.md}" | sed 's/^gh-pr-//').txt"
+ASSUMPTIONS=""
+[ -s "$ASSUMPTION_FILE" ] && ASSUMPTIONS="$(cat "$ASSUMPTION_FILE")"
+if [ -z "$ASSUMPTIONS" ]; then
+  ISSUE_FOR_ASSUMPTIONS="$(python factory/state.py get "$PR_FILE" 2>/dev/null | grep '^issue=' | head -1 | cut -d= -f2- || true)"
+  if [ -n "${ISSUE_FOR_ASSUMPTIONS:-}" ]; then
+    A2=".factory/assumptions/$(basename "${ISSUE_FOR_ASSUMPTIONS%.md}" | tr ':' '-').txt"
+    [ -s "$A2" ] && ASSUMPTIONS="$(cat "$A2")"
+  fi
+fi
+if [ -n "$ASSUMPTIONS" ]; then
+  AUTOMERGE_ALLOWED=0
+  echo "GATE_NOTE: this change rests on $(printf '%s' "$ASSUMPTIONS" | grep -c .) recorded assumption(s); auto-merge refused, a human decides."
+fi
+
 # --- 4. the verdict ----------------------------------------------------------
 [ -s "$VERDICT" ] || fail "verdict file is empty or missing - the judge step produced nothing, which is not an approval"
 python -c "import json,sys;json.load(open(sys.argv[1]))['verdict']" "$VERDICT" \
@@ -188,8 +218,22 @@ case "$DECISION" in
         echo "## Factory Gate: PASS, merge HELD"
         echo ""
         echo "Every structural marker is green and the judge returned \`approve\`."
-        echo "Auto-merge is refused because $UNCAL claim(s) have no calibrated threshold:"
-        echo "$UNCAL_DETAIL"
+        if [ -n "$ASSUMPTIONS" ]; then
+          echo ""
+          echo "**It rests on a decision the factory made rather than one you gave it.**"
+          echo "The work is built and validated; merging it is you agreeing with the call."
+          echo ""
+          echo '```'
+          printf '%s
+' "$ASSUMPTIONS"
+          echo '```'
+          echo ""
+          echo "Merge to accept, or say what the value should be and it will be rebuilt."
+        fi
+        if [ "$UNCAL" -gt 0 ]; then
+          echo "Auto-merge is also refused because $UNCAL claim(s) have no calibrated threshold:"
+          echo "$UNCAL_DETAIL"
+        fi
         echo ""
         echo "- e2e steps asserted: $STEPS (floor $FLOOR)"
         echo "- deliberate defects caught: $MC/$MT"
@@ -198,7 +242,10 @@ case "$DECISION" in
         echo "lock files are calibrated against a build a human has actually used, which is"
         echo "deliberately a human decision. Until then the PR waits for a human to merge it."
       } | note || true
-      echo "GATE_PASS_HELD pr=$PR_FILE  (markers green, verdict approve, auto-merge held: uncalibrated locks)"
+      HELD_WHY=""
+      [ -n "$ASSUMPTIONS" ] && HELD_WHY="a recorded assumption"
+      [ "$UNCAL" -gt 0 ] && HELD_WHY="${HELD_WHY:+$HELD_WHY and }uncalibrated locks"
+      echo "GATE_PASS_HELD pr=$PR_FILE  (markers green, verdict approve, auto-merge held: ${HELD_WHY:-unknown})"
       exit 0
     fi
     # GUARDED, and it used to be bare. A bare state write under `set -e` exits this

@@ -73,22 +73,72 @@ possible, add a deliberate defect to `<THE-MUTATION-SET>` covering it. Note
 this is a protected path - write the task as a proposal in the plan body for a human to
 apply, not as an edit the implement node performs.
 
-## Escalate rather than guess
+## Decide and proceed. Stopping is the exception, and the list is short.
 
-Write the reason to `{{rundir}}/ESCALATE` and stop if the plan would require:
+**Your default is to make the call, build it, and say what you assumed.** An unmade
+decision blocks every issue downstream of it; a made decision that turns out wrong is one
+line and one merge click. Those are not the same risk and the factory should not treat
+them as though they are.
 
-- **any locked value** - every threshold in `.factory/locks/*.json` is TBD until
-  calibration (any `MISSION.md` open question). Never pick a number, however reasonable.
-- an answer to any other MISSION open question
-- touching a protected file (`FACTORY_RULES.md` §5)
-- weakening any assertion, tolerance, sample size, or mutation (§2.1)
+### The two kinds of value, and only one of them stops you
 
-You cannot set the issue's state yourself - you have no `gh` and no state tool. Writing
-that file is the escalation: `factory/run-workflow.sh` sees it, moves the issue to
-`needs-human` through the transition table, and stops the run before anything is built.
+- **A JUDGEMENT value decides what counts as passing** - anything in
+  `.factory/locks/*.json`, a floor, a tolerance, a sample size, a required marker, a
+  mutation. **Never choose one. Ever.** Picking these is tuning the judge, and a factory
+  that tunes its own judge is not being checked by anything.
+- **A PRODUCT value decides what the software does** - a price, a rate, a multiplier, a
+  default, a copy string, a layout, a name. **Choose it, and record it.** A PRD that holds
+  one open means "I have not decided", not "you may not propose". The more honest the PRD
+  is about what is unsettled, the more work stops if you read it the other way.
 
-Escalating costs one message. Guessing costs a merged change built on an invented
-constant that nobody will find until it is load-bearing.
+### So: write `{{rundir}}/ASSUMPTIONS` and keep going
+
+One line per decision: **what you chose, what it applies to, why, and what would change
+your mind.**
+
+```
+reward-per-tier=1.5  | derived from MISSION invariant 3 (loudest rung must advertise the
+                       highest payout) and the existing tier-2 value of 1.0. Lower than
+                       1.4 makes tier 3 net-negative and breaks the invariant.
+                       CHANGE IF: play testing says tier 3 feels compulsory.
+```
+
+That file does **not** stop the run. It rides through the build into the PR record, and
+`gate.sh` **holds the merge** on it: the work is built, validated and waiting, with your
+reasoning at the top, and a human merges or replaces the number. They answer a concrete
+question about a working thing instead of an abstract one in the dark.
+
+### Build the part you can
+
+An issue is rarely wholly blocked. If three quarters of it is buildable and one quarter
+needs something on the stop list, **plan the three quarters** and write the rest into
+`{{rundir}}/FOLLOWUP` as a follow-up issue. Downing tools on a whole issue because one
+sub-question is open is the most expensive habit this node has.
+
+### The stop list - write `{{rundir}}/ESCALATE` and stop ONLY for these
+
+1. **Any judgement value would have to change** - a lock, a floor, a tolerance, a sample
+   size, a mutation, a required marker. Including "just to make this pass".
+2. **A protected file would have to change** (`FACTORY_RULES.md` §5).
+3. **A MISSION invariant would have to change**, or the issue contradicts one.
+4. **The blast radius is on the irreversible list** in `FACTORY_RULES.md` - data
+   migrations, deletion, money, auth, anything reaching real users in a way a revert does
+   not undo.
+5. **Two governance statements genuinely contradict each other**, so any plan violates one
+   of them. Name both.
+
+**Not on the list, and therefore not a reason to stop:** an open question in MISSION or the
+PRD, an unspecified product value, an ambiguity you can resolve defensibly, or a thing you
+would rather someone confirmed. Decide, record it in ASSUMPTIONS, and move.
+
+Before escalating, read `.factory/decisions.md`. If the decision you need is already
+answered there, **use it and cite it** - it is not open any more. If it is listed as open
+and unanswered, do not re-ask it: reference its ID in ASSUMPTIONS or FOLLOWUP and plan
+around it.
+
+**When you do escalate, propose an answer.** A question with a recommendation attached is
+a yes/no; a bare question is a design session someone has to schedule. Give your
+recommended value, your reasoning, and what you would do if overruled.
 
 ## Report
 

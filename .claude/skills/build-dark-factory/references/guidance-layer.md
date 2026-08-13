@@ -130,7 +130,7 @@ a blank file, and do not paste the PRD in whole either. Map it:
 | MVP scope, capability areas | **In scope** |
 | **non-goals** | **Out of scope, forever** (see the sort below) |
 | success metrics | what a merged change is ultimately meant to move |
-| anything marked TBD | do **not** carry it over as a rule. It becomes a `needs-human` trigger |
+| anything marked TBD | do **not** carry it over as a rule. It becomes an entry in `.factory/decisions.md` - proposed by the factory, held at the merge, and answered ONCE. A blanket `needs-human` trigger here is what makes an honest PRD block every issue downstream of it |
 
 **The sort that matters: "not now" is not "not ever".** A PRD's non-goals are usually
 a mix of the two, because a PRD is written to keep a team focused for a quarter and

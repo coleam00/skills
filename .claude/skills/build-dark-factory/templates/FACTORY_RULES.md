@@ -136,17 +136,65 @@ config file that could hold a token. **Empty output means the next run publishes
 
 The validator posts which rule fired, closes the PR, and re-queues the issue.
 
-## 7. Escalation to `factory:needs-human`
+## 7. Deciding, and the short list that stops the factory
 
-- <2> failed validation cycles on the same PR
-- the fix step reports it cannot resolve the findings
-- low triage confidence on an in-scope but interestingly ambiguous issue
-- two consecutive scheduled-test failures in the same area
-- a critical or high security finding
-- a protected file was touched
+<!--
+  THE DEFAULT IS TO DECIDE AND PROCEED. This section used to list "low triage confidence
+  on an in-scope but interestingly ambiguous issue" as a stop condition, which is an open
+  invitation to refuse work: everything is interestingly ambiguous to something that would
+  rather not be wrong.
 
-Escalation means: apply the label, comment with why, and **stop all factory activity
-on that issue or PR** until a human removes the label.
+  Measured cost of the old reading: four issues filed against one game produced four
+  escalations, zero PRs, and the SAME unmade product decision reported four separate
+  times - because an open question in the PRD was read as "you may not propose" when the
+  author meant "I have not decided yet". One human answer later unblocked three of them.
+-->
+
+### 7.1 The two kinds of value
+
+| | | May the factory choose it? |
+|---|---|---|
+| **Judgement value** | what counts as passing - a lock, a floor, a tolerance, a sample size, a mutation, a required marker | **Never.** Choosing one is tuning the judge. |
+| **Product value** | what the software does - a price, a rate, a default, a name, a layout | **Yes.** Choose it, record it in `ASSUMPTIONS`, and the merge is held for a human. |
+
+An assumption does **not** stop the work. It rides into the PR record and `gate.sh`
+refuses the *auto-merge* on it, so the change is built, validated and waiting with the
+reasoning at the top. The human then answers a concrete question about a running thing
+rather than an abstract one about nothing.
+
+### 7.2 The stop list - complete, and deliberately short
+
+1. a **judgement value** would have to change
+2. a **protected file** would have to change (§5)
+3. a **MISSION invariant** would have to change, or the issue contradicts one
+4. the blast radius is on the **irreversible list** in §7.3
+5. two governance statements genuinely contradict, so every plan violates one
+6. <2> failed validation cycles on the same PR, or the fix step cannot resolve the findings
+7. a critical or high security finding
+
+**Not on the list:** an open question in MISSION or the PRD, an unspecified product value,
+an ambiguity that can be resolved defensibly, a thing you would merely prefer confirmed.
+
+### 7.3 The irreversible list - the only blast radius that stops work
+
+<!-- Set this in the interview. These are the changes a revert does not undo. Keep it
+     short: everything on it costs throughput, and everything missing from it costs more
+     than throughput. -->
+
+- <schema migrations and any destructive data change>
+- <anything that moves money>
+- <auth, permissions, and secret handling>
+- <a public/irreversible external side effect - a sent email, a published package>
+
+### 7.4 When it does stop
+
+Apply the label, comment with why, **propose an answer**, and stop factory activity on
+that issue or PR until a human acts. A bare question is a design session somebody has to
+schedule; a recommendation with reasoning is a yes/no. Always give the recommendation.
+
+Record it in `.factory/decisions.md` under a new ID, with what is blocked on it. **Ask a
+given decision once.** A second issue that needs the same answer references the ID and
+carries on - it does not re-ask.
 
 ## 8. Cost and throughput
 
