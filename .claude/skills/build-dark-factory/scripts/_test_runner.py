@@ -299,6 +299,10 @@ fi
 echo "{\\"result\\":\\"stub\\",\\"total_cost_usd\\":0}"
 exit 0
 """)
+    # The shebang is load-bearing now that it is invoked directly rather than via bash.
+    import stat as _stat
+    for _exe in ("factory/stub-agent.sh", "factory/notify.sh"):
+        pass
     f.write("factory/notify.sh", """#!/usr/bin/env bash
 mkdir -p .factory/notifications
 cat >> .factory/notifications/feed.log
@@ -318,7 +322,15 @@ echo >> .factory/notifications/feed.log
             "(scripts/_audit_runner.py --repo <repo> reports this too).")
     cfg = cfgp.read_text(encoding="utf-8")
     for var, val in (("FACTORY_BACKEND", "files"),
-                     ("FACTORY_AGENT", "bash ./factory/stub-agent.sh"),
+                     # ONE EXECUTABLE, never a command with arguments. The runner
+                     # invokes it as `"$AGENT" -p ...`, so `bash ./factory/stub-agent.sh`
+                     # is looked up as a single filename and fails `No such file or
+                     # directory` -- the documented FACTORY_AGENT defect, reproduced
+                     # inside the fixture meant to test for it. The stub never ran in ANY
+                     # test: every node reported NODE_FAILED, escalate() supplied the
+                     # needs-human state and the notification, and tests asserting on
+                     # those passed while exercising nothing they claimed to.
+                     ("FACTORY_AGENT", "./factory/stub-agent.sh"),
                      ("FACTORY_AUTONOMY", "3")):
         pat = re.compile(rf'^{var}="\$\{{{var}:-[^}}]*\}}"', re.M)
         if not pat.search(cfg):
@@ -335,6 +347,10 @@ echo >> .factory/notifications/feed.log
     cfg = re.sub(r'FACTORY_VALIDATE_QUICK="\$\{FACTORY_VALIDATE_QUICK:-[^}]*\}"',
                  'FACTORY_VALIDATE_QUICK="${FACTORY_VALIDATE_QUICK:-python harness/ci.py --quick}"', cfg)
     cfgp.write_text(cfg, encoding="utf-8", newline="\n")
+
+    for _exe in ("stub-agent.sh", "notify.sh"):
+        _p = dest / "factory" / _exe
+        _p.chmod(_p.stat().st_mode | 0o111)
 
     f.issue("0001-widget")
     subprocess.run(["git", "add", "-A"], cwd=dest, check=True)
@@ -536,13 +552,23 @@ def test_orchestrator_cap_branch_notifies(f: Factory):
       "is not a fault")
 def test_triage_needs_human_notifies(f: Factory):
     f.issue("0009-unclear", state="untriaged")
-    f.node_action("triage", TRIAGE_NEEDS_HUMAN)
+    # The node is called `sort`, not `triage` -- the WORKFLOW is triage, the NODE inside
+    # it is sort. Scripting the wrong name means the stub does nothing, the node writes no
+    # decision, and the run escalates as a FAULT: needs-human is reached and a notification
+    # is sent, so a test asserting only those two things passes while never once
+    # exercising the triage decision it claims to cover.
+    f.node_action("sort", TRIAGE_NEEDS_HUMAN)
     f.clear_signals()
     rc, out = f.run("triage", "issues/0009-unclear.md")
     ok(f.state_of("issues/0009-unclear.md") == "needs-human",
        f"triage did not park the issue:\n{out[-1000:]}")
-    has(f.notifications(), "needs a human",
+    has(f.notifications(), "(triage)",
         "a correct triage stop told nobody -- two correct stops, silence")
+    # NOT merely "needs a human": escalate() emits that too, so the weaker assertion is
+    # satisfied by any runner FAULT during the run and cannot tell the two apart. That is
+    # exactly how this test passed while the triage notification was deleted.
+    hasnt(out, "ESCALATE:", "the run FAULTED; this must be a clean triage decision")
+    has(out, "TRIAGED", "triage never recorded a decision")
 
 
 @test("a merge refused on the ORCHESTRATOR route killed the tick silently: reached from "
@@ -669,8 +695,34 @@ GOOD_LOG = ("STATIC_OK\nPROTECTED_OK\nUNIT_PASSED tests=9\nAPP_STARTED driver=li
             "MUTATIONS_TOTAL=4\nMUTATIONS_CAUGHT=4\nGATE_OK mode=full\n")
 
 
-def gate(f: Factory, log: str, verdict: str, pr_state="validating", ident="0001-widget"):
-    """Run the real gate against a synthesised run."""
+def gate(f: Factory, log: str, verdict: str, pr_state="validating", ident="0001-widget",
+         branch=True):
+    """Run the real gate against a synthesised run.
+
+    THE BRANCH IS CREATED FOR REAL, and that is not a detail. Without it every gate run
+    ends the same way -- the gate decides, then `merge.sh` refuses a branch that does not
+    exist, and the script exits non-zero with `GATE_FAIL: merge failed`. A refusal test
+    asserting only `rc != 0` and `GATE_FAIL` is then satisfied by the MISSING BRANCH rather
+    than by the thing it claims to test.
+
+    That is not hypothetical: `--mutate` disabled the required-marker check entirely and
+    `test_gate_requires_positive_markers` stayed green, because the gate passed the markers
+    exactly as the mutation intended and then died on the absent branch. The test had never
+    tested markers at all. Every refusal test below now also asserts the SPECIFIC reason,
+    for the same reason the gate itself demands positive markers: "something failed" is not
+    evidence that the right thing failed.
+    """
+    # THE BRANCH IS MADE FIRST, AND STAGES ONLY THE CODE FILE. `issues/*.md` and
+    # `.factory/prs/*.md` are TRACKED state on the file backend, so a `git add -A` on the
+    # branch commits them there and `git checkout main` then deletes the PR record from the
+    # working tree -- every later `state.py get` fails on a missing file. Writing the
+    # records after the branch exists, and staging only `widget.py`, keeps the state where
+    # the gate expects to find it.
+    if branch:
+        f.sh(f"git checkout -q -b factory/{ident} && "
+             f"printf 'def gad():\\n    return 1\\n' > widget.py && "
+             f"git add widget.py && git commit -q -m 'factory: work' && "
+             f"git checkout -q main")
     f.issue(ident, state="in-progress")
     f.pr(ident, state=pr_state)
     rd = ".factory/runs/t"
@@ -682,6 +734,14 @@ def gate(f: Factory, log: str, verdict: str, pr_state="validating", ident="0001-
     return rc, out
 
 
+def refused_for(out: str, reason: str, what: str):
+    """A refusal must name ITS OWN cause, not merely be a refusal."""
+    has(out, "GATE_FAIL", f"{what}: the gate did not refuse at all")
+    if reason not in out:
+        raise Failed(f"{what}: the gate refused, but for the wrong reason. "
+                     f"Expected {reason!r}.\n--- got ---\n{out[-1200:]}")
+
+
 @test("empty is not pass: a required marker missing from the run log must BLOCK, because "
       "a check that did not report that it ran is not a check that passed")
 def test_gate_requires_positive_markers(f: Factory):
@@ -691,7 +751,7 @@ def test_gate_requires_positive_markers(f: Factory):
     log = GOOD_LOG.replace("PROTECTED_OK\n", "")
     rc, out = gate(f, log, '{"verdict":"approve"}')
     ok(rc != 0, f"the gate passed a run with a required marker absent:\n{out[-900:]}")
-    has(out, "GATE_FAIL", "the refusal was not named")
+    refused_for(out, "required marker(s) absent", "a missing marker")
     ok(f.state_of(".factory/prs/0001-widget.md") == "needs-human", "the PR was not parked")
 
 
@@ -701,6 +761,7 @@ def test_gate_requires_positive_markers(f: Factory):
 def test_gate_log_beats_an_approving_judge(f: Factory):
     rc, out = gate(f, GOOD_LOG + "GATE_FAILED: unit\n", '{"verdict":"approve"}')
     ok(rc != 0, f"an approving verdict overrode a failed log:\n{out[-900:]}")
+    refused_for(out, "the suite stopped at the 'unit' step", "a failed step in the log")
 
 
 @test("a malformed verdict must FAIL CLOSED -- not JSON, no verdict key, wrong type, "
@@ -714,6 +775,12 @@ def test_gate_fails_closed_on_malformed_verdicts(f: Factory):
         try:
             rc, out = gate(g, GOOD_LOG, v)
             ok(rc != 0, f"verdict {v!r} did not fail closed (rc={rc}):\n{out[-500:]}")
+            # It must fail on the VERDICT, not somewhere downstream. Three distinct and
+            # all-correct branches reach that: an empty file, an unparseable one, and a
+            # parseable one carrying a verdict nothing recognises (`{"verdict": null}` is
+            # valid JSON with the field present, so it lands on the last of the three).
+            ok(any(k in out for k in ("verdict file is", "not parseable", "unknown verdict")),
+               f"verdict {v!r} was refused for the wrong reason:\n{out[-700:]}")
             ok(g.state_of(".factory/prs/0001-widget.md") == "needs-human",
                f"verdict {v!r} left the PR unparked")
         finally:
@@ -726,6 +793,7 @@ def test_gate_enforces_the_e2e_floor(f: Factory):
     log = GOOD_LOG.replace("E2E_PASSED steps=5", "E2E_PASSED steps=1")
     rc, out = gate(f, log, '{"verdict":"approve"}')
     ok(rc != 0, f"the gate accepted a run below the e2e floor:\n{out[-900:]}")
+    refused_for(out, "asserted only 1 of 3 steps", "a run below the e2e floor")
 
 
 @test("mutation score is a gate, not a report: a run that caught fewer defects than it "
@@ -734,6 +802,7 @@ def test_gate_enforces_the_mutation_score(f: Factory):
     log = GOOD_LOG.replace("MUTATIONS_CAUGHT=4", "MUTATIONS_CAUGHT=1")
     rc, out = gate(f, log, '{"verdict":"approve"}')
     ok(rc != 0, f"the gate accepted a run that missed injected defects:\n{out[-900:]}")
+    refused_for(out, "caught 1 of 4 deliberate defects", "a missed mutation")
 
 
 @test("a recorded ASSUMPTION holds the auto-merge without stopping the work -- the "
@@ -752,12 +821,6 @@ def test_recorded_assumption_holds_the_merge(f: Factory):
       "-- a gate that refuses everything is not a gate, and every refusal test above "
       "would pass against one")
 def test_gate_passes_and_merges_a_clean_run(f: Factory):
-    # A real branch with a real commit, so the merge path is exercised rather than
-    # skipped. Without this the gate passes and merge.sh correctly refuses a branch that
-    # does not exist -- which looks like a gate failure and proves nothing either way.
-    f.sh("git checkout -q -b factory/0001-widget && "
-         "printf 'def gad():\\n    return 1\\n' > widget.py && "
-         "git add -A && git commit -q -m 'factory: gad the widget' && git checkout -q main")
     rc, out = gate(f, GOOD_LOG, '{"verdict":"approve"}')
     has(out, "GATE_PASS", "a clean run did not pass the gate")
     hasnt(out, "GATE_FAIL", f"a clean run was refused:\n{out[-900:]}")
