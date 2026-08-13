@@ -1042,6 +1042,197 @@ def test_gh_every_state_has_a_label(f: Factory):
         ok(st_name not in m.LABEL_FOR_STATE,
            f"{st_name} must stay label-less; it means the absence of one")
 
+
+# =============================================================================
+# GROUP H -- the validation harness scaffold.
+# =============================================================================
+# `templates/harness/` is the SECOND thing copied into every repo, and it decides whether
+# a gate is green because everything passed or green because nothing ran. Its historical
+# defects are all that one shape: a holdout that did not exist, a mutation set that never
+# executed, an e2e rung that hung forever with no timeout, a unit suite that discovered
+# zero tests and exited 0 looking perfect.
+#
+# The fixture installs the REAL harness over the stub, with a `library` driver: no ports,
+# nothing to bind, nothing to pop a window while somebody is recording.
+
+HARNESS_SRC = TEMPLATES / "harness"
+
+E2E_TRIVIAL = '''STEPS = 0
+
+
+def run_e2e(app):
+    """A journey with no scaffold marker in it, so the doctor's check is not the subject."""
+    global STEPS
+    STEPS = 3
+    return STEPS
+'''
+
+E2E_HANGS = '''import time
+
+
+def run_e2e(app):
+    time.sleep(600)          # the shape of a browser CLI blocking on a pipe forever
+    return 1
+'''
+
+E2E_FAILS = '''def run_e2e(app):
+    return None              # a journey that could not be completed
+'''
+
+
+def install_harness(f: Factory, e2e: str = E2E_TRIVIAL, unit_tests: int = 9,
+                    **config):
+    """Put the REAL harness in the fixture, with a library driver and a chosen e2e."""
+    dest = f.root / "harness"
+    for name in ("ci.py", "appproc.py", "harness.config.json"):
+        shutil.copy(HARNESS_SRC / name, dest / name)
+    (dest / "e2e.py").write_text(e2e, encoding="utf-8", newline="\n")
+
+    import json
+    cfg = json.loads((HARNESS_SRC / "harness.config.json").read_text(encoding="utf-8"))
+    cfg["driver"] = "library"
+    cfg["library"] = {"import_check": "python -c \"import app\""}
+    cfg["static"] = "python harness/_static.py"
+    cfg["unit"] = "python harness/_unit.py"
+    cfg["unit_count_pattern"] = r"Ran (\d+) test"
+    cfg.update(config)
+    (dest / "harness.config.json").write_text(json.dumps(cfg, indent=2),
+                                              encoding="utf-8", newline="\n")
+    # Tiny real scripts rather than `python -c "..."`: a one-liner has to survive JSON
+    # escaping, shlex.split and the shell, and every layer of that is a way for a test to
+    # fail for a reason that has nothing to do with what it is testing.
+    (dest / "_static.py").write_text("pass\n", encoding="utf-8", newline="\n")
+    (dest / "_unit.py").write_text(
+        f"print('Ran {unit_tests} tests')\n", encoding="utf-8", newline="\n")
+
+
+def ci(f: Factory, *args, env=None, timeout=120):
+    return f.sh(f'"{sys.executable}" harness/ci.py {" ".join(args)}',
+                env=env, timeout=timeout)
+
+
+@test("a gate with NO holdout must say so: without one, nothing above the independence "
+      "line ran and every check is one the builder could read and iterate against")
+def test_harness_reports_an_absent_holdout(f: Factory):
+    install_harness(f)
+    rc, out = ci(f)
+    has(out, "HOLDOUT_ABSENT",
+        "a gate with no holdout reported nothing about it -- green because nothing ran")
+
+
+@test("a gate with NO mutation set must say so: a gate that has never been shown to fail "
+      "is a gate nobody has tested")
+def test_harness_reports_an_absent_mutation_set(f: Factory):
+    install_harness(f)
+    rc, out = ci(f)
+    has(out, "MUTATIONS_ABSENT", "a gate with no mutation set claimed nothing about it")
+
+
+@test("ZERO TESTS IS NOT A PASS: a suite that discovered nothing exits 0 and looks "
+      "perfect. Both independent builds of this file added this guard unprompted.")
+def test_harness_refuses_a_zero_test_suite(f: Factory):
+    install_harness(f, unit_tests=0)
+    rc, out = ci(f)
+    ok(rc != 0, f"a suite that ran 0 tests was accepted:\n{out[-700:]}")
+    has(out, "UNIT_ERROR", "the refusal did not name itself")
+    hasnt(out, "GATE_OK", "a zero-test run reached GATE_OK")
+
+
+@test("an unconfigured rung must be skipped LOUDLY -- a silent skip is indistinguishable "
+      "from a pass, which is the whole failure this harness exists to prevent")
+def test_harness_skips_loudly(f: Factory):
+    install_harness(f, static="")
+    rc, out = ci(f)
+    has(out, "STATIC_SKIPPED", "an unconfigured rung passed in silence")
+
+
+@test("a failing rung must be NAMED: the last line of output is usually several rungs "
+      "downstream of the cause, and misnaming your own failure is most of the cost")
+def test_harness_names_the_failing_rung(f: Factory):
+    install_harness(f, static="python harness/_boom.py")
+    (f.root / "harness" / "_boom.py").write_text("raise SystemExit(1)\n",
+                                                 encoding="utf-8", newline="\n")
+    rc, out = ci(f)
+    ok(rc != 0, "a failing rung did not fail the gate")
+    has(out, "GATE_FAILED: static", "the gate did not name which rung stopped it")
+
+
+@test("the e2e rung is called IN PROCESS, so nothing upstream can interrupt it. It was "
+      "the rung most likely to hang and the only one with no timeout: the gate printed "
+      "APP_STARTED and then nothing, all night, holding its dispatch lock.")
+def test_harness_watchdog_kills_a_hanging_e2e(f: Factory):
+    install_harness(f, e2e=E2E_HANGS, e2e_timeout_s=3)
+    t0 = time.time()
+    rc, out = ci(f, timeout=90)
+    elapsed = time.time() - t0
+    ok(rc != 0, "a hanging e2e rung did not fail the gate")
+    has(out, "E2E_TIMEOUT", "the hang was not named")
+    ok(elapsed < 60, f"the watchdog took {elapsed:.0f}s to fire on a 3s timeout")
+
+
+@test("the watchdog must stay silent on a normal run -- a deadline that fires on healthy "
+      "runs is one somebody raises until it never fires at all")
+def test_harness_watchdog_is_silent_when_healthy(f: Factory):
+    install_harness(f, e2e_timeout_s=60)
+    rc, out = ci(f)
+    hasnt(out, "E2E_TIMEOUT", "the watchdog fired on a healthy run")
+    has(out, "E2E_PASSED", "a healthy e2e did not report passing")
+
+
+@test("an e2e that returns no completed journey must FAIL, not report zero steps and "
+      "carry on")
+def test_harness_fails_on_an_incomplete_journey(f: Factory):
+    install_harness(f, e2e=E2E_FAILS)
+    rc, out = ci(f)
+    ok(rc != 0, "an e2e that completed no journey was accepted")
+    has(out, "GATE_FAILED: e2e", "the failure was not attributed to the e2e rung")
+
+
+@test("the mutation runner copies harness/ into each throwaway build, so without a "
+      "recursion guard the inner gate re-runs everything: 6 defects becomes 36 gate runs "
+      "and the score is misattributed")
+def test_harness_does_not_recurse_into_mutations(f: Factory):
+    install_harness(f)
+    rc, out = ci(f, env={"FACTORY_IN_MUTATION": "1"})
+    has(out, "MUTATIONS_SKIPPED", "a mutation build re-ran the mutation rung")
+
+
+@test("--quick is a STRICT subset the builder runs on itself: it must stop before the "
+      "independent rungs, because nothing downstream trusts it and the full gate re-runs "
+      "everything anyway")
+def test_harness_quick_is_a_strict_subset(f: Factory):
+    install_harness(f)
+    rc, out = ci(f, "--quick")
+    ok(rc == 0, f"the quick gate failed on a healthy repo:\n{out[-600:]}")
+    has(out, "GATE_OK mode=quick", "quick mode did not report itself")
+    for absent in ("E2E_PASSED", "HOLDOUT", "MUTATIONS"):
+        hasnt(out, absent, f"quick mode ran {absent}, so it is not a subset")
+
+
+@test("a command whose interpreter path is QUOTED must still run. `shlex.split(posix="
+      "False)` keeps backslashes in Windows paths -- correctly -- but it also keeps the "
+      "QUOTES attached to the token, so `shutil.which` never matched and the rung died "
+      "with the exact [WinError 2] that resolve() exists to prevent. Quoting is not "
+      "optional for a path containing a space, and Program Files is where Windows puts "
+      "things.")
+def test_harness_runs_a_quoted_interpreter_path(f: Factory):
+    install_harness(f, static=f'"{sys.executable}" harness/_static.py')
+    rc, out = ci(f)
+    hasnt(out, "could not run",
+          f"a quoted interpreter path was unrunnable:\n{out[-700:]}")
+    has(out, "STATIC_OK", "the rung with a quoted interpreter path did not pass")
+
+
+@test("a full healthy run must reach GATE_OK and emit every marker the gate requires by "
+      "default -- if it cannot, FACTORY_REQUIRED_MARKERS blocks every PR out of the box")
+def test_harness_healthy_run_emits_the_required_markers(f: Factory):
+    install_harness(f)
+    rc, out = ci(f)
+    ok(rc == 0, f"a healthy repo did not pass its own gate:\n{out[-800:]}")
+    # The shipped default of FACTORY_REQUIRED_MARKERS.
+    for marker in ("APP_STARTED", "E2E_PASSED", "GATE_OK"):
+        has(out, marker, f"the default required marker {marker} was never emitted")
+
 # =============================================================================
 # the runner
 # =============================================================================
@@ -1084,9 +1275,18 @@ def run_suite(only: str | None, keep: bool, tmp: Path, quiet=False) -> tuple[int
 # so by name -- which is the only way a regression suite stays honest as it grows.
 
 class Mutation:
-    def __init__(self, ident, path, find, replace, why, expect):
+    """A real defect that shipped, and the test that must go red when it comes back.
+
+    `scope` says WHICH tree to mutate. "factory" is the runner, copied into the fixture
+    when it is built. "harness" is the validation scaffold, which `install_harness` copies
+    from the template at TEST time -- so mutating the fixture's copy would be overwritten a
+    moment later. Harness mutations patch a copy of the template and repoint HARNESS_SRC
+    at it instead, which is the only way the copy the test actually runs is the mutated one.
+    """
+
+    def __init__(self, ident, path, find, replace, why, expect, scope="factory"):
         self.id, self.path, self.find, self.replace = ident, path, find, replace
-        self.why, self.expect = why, expect
+        self.why, self.expect, self.scope = why, expect, scope
 
 
 MUTATIONS = [
@@ -1156,6 +1356,43 @@ MUTATIONS = [
         "without --exclude the dispatcher asks the same question and gets the same "
         "answer, so FACTORY_MAX_PARALLEL silently does nothing",
         "test_max_parallel_dispatches_more_than_one"),
+    # --- the validation harness. Every one of these is the same shape: the gate goes
+    # --- green because a check did not run, rather than because it passed.
+    Mutation(
+        "holdout-absence-is-silent", "ci.py",
+        'print("HOLDOUT_ABSENT no .factory/holdout/run.py - NOTHING above the "',
+        'print("" or ("holdout absent" and "") or "", end="") or print("QUIET_ABSENT "',
+        "a gate with no holdout said nothing about it, so every check in it was one the "
+        "builder could read and iterate against -- and it read as fully green",
+        "test_harness_reports_an_absent_holdout", "harness"),
+    Mutation(
+        "zero-tests-is-a-pass", "ci.py",
+        "if ran == 0:",
+        "if False:",
+        "a unit suite that discovered nothing exits 0 and looks perfect",
+        "test_harness_refuses_a_zero_test_suite", "harness"),
+    Mutation(
+        "no-e2e-watchdog", "ci.py",
+        'wd = watchdog(int(CONFIG.get("e2e_timeout_s", 300)), "e2e", app)',
+        "wd = type('N', (), {'cancel': lambda self: None})()",
+        "the e2e rung is called in process, so nothing upstream can interrupt it: the "
+        "gate printed APP_STARTED and then nothing at all, all night, holding its lock",
+        "test_harness_watchdog_kills_a_hanging_e2e", "harness"),
+    Mutation(
+        "mutation-recursion", "ci.py",
+        'if os.environ.get("FACTORY_IN_MUTATION") == "1":',
+        "if False:",
+        "the mutation runner copies harness/ into each throwaway build, so the inner gate "
+        "re-runs everything and misattributes which rung caught the defect",
+        "test_harness_does_not_recurse_into_mutations", "harness"),
+    Mutation(
+        "quoted-path-unresolved", "ci.py",
+        'if len(head) > 1 and head[0] == head[-1] and head[0] in "\"\'":',
+        "if False:",
+        "shlex.split(posix=False) leaves the QUOTES on the token, so a correct command "
+        "whose interpreter path contains a space died with the exact [WinError 2] that "
+        "resolve() exists to prevent",
+        "test_harness_runs_a_quoted_interpreter_path", "harness"),
     Mutation(
         "gate-passes-on-absence", "factory/gate.sh",
         'grep -q "$MARKER" "$LOG" || MISSING="$MISSING $MARKER"',
@@ -1181,23 +1418,37 @@ def run_mutations(tmp: Path, only: str | None) -> int:
     for m in MUTATIONS:
         if only and only not in m.id:
             continue
+        global HARNESS_SRC
+        clean_harness = HARNESS_SRC
         mutant = tmp / f"mutant-{m.id}"
-        shutil.copytree(clean, mutant, symlinks=True)
-        target = mutant / m.path
+        if m.scope == "harness":
+            # Mutate a copy of the TEMPLATE harness and point install_harness at it.
+            shutil.copytree(clean, mutant, symlinks=True)
+            hmut = tmp / f"harness-{m.id}"
+            shutil.copytree(clean_harness, hmut)
+            target = hmut / m.path
+        else:
+            shutil.copytree(clean, mutant, symlinks=True)
+            target = mutant / m.path
         s = target.read_text(encoding="utf-8")
         if m.find not in s:
             print(f"  SKIP  {m.id:<34} the code it mutates no longer exists -- "
                   f"the mutation needs updating, NOT deleting")
             print(f"        looked for: {m.find[:88]}")
             survived.append((m, "STALE"))
+            HARNESS_SRC = clean_harness
+            shutil.rmtree(mutant, ignore_errors=True)
             continue
         target.write_text(s.replace(m.find, m.replace, 1), encoding="utf-8", newline="\n")
 
+        if m.scope == "harness":
+            HARNESS_SRC = hmut
         PRISTINE = mutant
         sub = tmp / f"run-{m.id}"
         sub.mkdir(parents=True, exist_ok=True)
         _, _, failures = run_suite(None, False, sub, quiet=True)
         PRISTINE = clean
+        HARNESS_SRC = clean_harness
         shutil.rmtree(mutant, ignore_errors=True)
         shutil.rmtree(sub, ignore_errors=True)
 

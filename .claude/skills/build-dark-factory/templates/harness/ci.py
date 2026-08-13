@@ -59,11 +59,30 @@ def resolve(argv: list[str]) -> list[str]:
 
     Found the first time this scaffold was pointed at a Node project. `shutil.which` does
     the PATHEXT lookup, so the config stays the command you would type.
+
+    THE QUOTES COME OFF FIRST, and that is not cosmetic. Commands are split with
+    `shlex.split(posix=False)`, which is right on Windows because it leaves backslashes in
+    paths alone -- but it also leaves the QUOTES attached to the token. So a perfectly
+    reasonable config whose interpreter path contains a space:
+
+        "unit": "\\"C:\\\\Program Files\\\\Python312\\\\python.exe\\" -m pytest"
+
+    arrived here as argv[0] == '"C:\\Program Files\\Python312\\python.exe"', quotes and
+    all. `shutil.which` cannot match that, so it fell through unresolved and subprocess
+    failed with `[WinError 2] The system cannot find the file specified` -- the exact
+    misleading error this function exists to prevent, for the exact reason it was written:
+    a command that is correct and works when typed. Quoting is not optional for a path
+    with a space, and `C:\\Program Files` is where Windows puts things.
     """
     if not argv:
         return argv
-    found = shutil.which(argv[0])
-    return [found, *argv[1:]] if found else argv
+    head = argv[0]
+    if len(head) > 1 and head[0] == head[-1] and head[0] in "\"'":
+        head = head[1:-1]
+    found = shutil.which(head)
+    # `head` even when unresolved: subprocess handles a space inside a single argv entry,
+    # so the de-quoted form is strictly more runnable than the quoted one.
+    return [found or head, *argv[1:]]
 
 
 def run(step: str, cmd: str | list[str], timeout: int = 300) -> tuple[int, str]:
