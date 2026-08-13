@@ -60,7 +60,7 @@ attempts: 0
 <path - why it changed>
 
 ## Gate
-<the counts from .factory/runs/last.json: contract, unit, playthrough, e2e steps,
+<the counts from .factory/runs/last.json: static, unit, e2e steps,
  balance, mutations caught/total>
 
 ## Review findings

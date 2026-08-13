@@ -32,7 +32,7 @@ in order, running each task's validation command as you go.
 4. **Never build beyond what the plan asked for.** No opportunistic refactors, no "while
    I was in here". The plan's non-goals section is binding.
 5. **Never commit a binary asset**, including a placeholder. Art is text or code
-   (invariant I9, MISSION OS5).
+   (<THE-INVARIANT-THAT-FORBIDS-IT>, <THE-OUT-OF-SCOPE-ENTRY>).
 6. **Stay under 500 changed lines.** Over the cap, stop and report - the work needs
    splitting, and something nobody could review even in principle is not shippable here.
 
@@ -53,9 +53,9 @@ reading it here is that finding out now is cheaper than finding out in validatio
 If this change introduces a value that moves as a consequence of use, expose it on
 the state readout and assert it in `<THE-BEHAVIOURAL-CHECK>` **in this change**. A value that
 moves and is not observable cannot be proven to work by anybody, ever, and in a repo that
-merges without review that means it cannot be built (MISSION OS9).
+merges without review that means it cannot be built (<THE-OBSERVABILITY-RULE>).
 
-Adding an assertion is always in scope and needs no justification (MISSION capability 10).
+Adding an assertion is always in scope and needs no justification (<THE-HARNESS-IS-ONE-WAY-RULE>).
 If you added one, raise the matching count in `.factory/locks/floor.json` - that file is
 protected, so write the new value into your report for a human to apply rather than editing
 it. The gate will pass either way; the ratchet only requires observed ≥ floor.
@@ -70,7 +70,8 @@ After each task, run **exactly this command, verbatim**:
 
 It is the only one on your allowlist, so any other way of running the tests is denied and
 your work goes unchecked until the validator sees it. That is contract, unit and
-playthrough - fast, and enough to catch a mistake while you still remember making it.
+the end-to-end path - fast, and enough to catch a mistake while you still remember
+making it.
 
 **Do not run the full gate.** It belongs to the validator. A builder that can run the gate
 it is judged by will iterate against the gate rather than against the problem, and the two

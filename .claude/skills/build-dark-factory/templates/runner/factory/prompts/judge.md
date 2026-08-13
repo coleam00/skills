@@ -104,7 +104,7 @@ the point: a judge that can approve a PR directly is a judge that can merge one.
      "file": "<path/to/file>", "line": 132,
      "description": "what is wrong and why it matters"}
   ],
-  "rules_cited": ["FACTORY_RULES.md 9", "MISSION.md I5"]
+  "rules_cited": ["FACTORY_RULES.md <N>", "MISSION.md <INVARIANT-ID>"]
 }
 ```
 

@@ -63,7 +63,7 @@ nine-file one.
 The implement node runs these and has nothing else to go on.
 
 **The observability task.** If this change introduces any value that moves as a
-consequence of play, exposing it on the state readout and asserting it in the playthrough is
+consequence of use, exposing it on the state readout and asserting it end to end is
 **part of this change**, not follow-up work (`FACTORY_RULES.md` §9). Write it as a task.
 A plan that adds a dynamic value without adding its observable is incomplete and the
 gate will not catch it - this is the one hole in the harness that only a plan can close.
@@ -97,11 +97,15 @@ One line per decision: **what you chose, what it applies to, why, and what would
 your mind.**
 
 ```
-reward-per-tier=1.5  | derived from MISSION invariant 3 (loudest rung must advertise the
-                       highest payout) and the existing tier-2 value of 1.0. Lower than
-                       1.4 makes tier 3 net-negative and breaks the invariant.
-                       CHANGE IF: play testing says tier 3 feels compulsory.
+<name>=<value>  | WHY: derived from <the invariant, rule or existing value it follows
+                  from - name it, so the reader can check the derivation rather than
+                  the taste>. <what a nearby wrong value would break>.
+                  CHANGE IF: <the observation that would make this the wrong call>.
 ```
+
+The `CHANGE IF` line is the one that earns the merge. It tells the reader what to look for
+rather than asking them to have an opinion cold, and it is the difference between "do you
+like 1.5?" and "if tier 3 feels compulsory in play, this is the number to move".
 
 That file does **not** stop the run. It rides through the build into the PR record, and
 `gate.sh` **holds the merge** on it: the work is built, validated and waiting, with your

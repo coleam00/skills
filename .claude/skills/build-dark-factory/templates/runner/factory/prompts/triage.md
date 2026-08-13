@@ -25,7 +25,7 @@ table is decoration.
 
 ## The four dispositions
 
-**`accepted`** - names one of MISSION's ten in-scope capability areas **and** describes
+**`accepted`** - names one of MISSION's in-scope capability areas **and** describes
 something observable. Set `priority` and `area` too.
 
 **`deferred`** - matches MISSION's deferred backlog. **This is not a rejection.** Name the
@@ -34,9 +34,10 @@ expensive and silent: the factory will refuse the roadmap when its turn comes, a
 will know why until they read the issue history.
 
 **`rejected`** - on the out-of-scope-forever list, or modifies an invariant, or its
-value cannot be observed by the harness. Cite the entry by its `OS` number or invariant id.
+value cannot be observed by the harness. Cite the entry by its id, as MISSION.md numbers them.
 
-For MISSION OS9 specifically - unobservable value - the correct response is not a flat no.
+For <THE-OBSERVABILITY-RULE> specifically - a value nothing can observe - the correct
+response is not a flat no.
 It is: *make it observable first, then it is in scope.* Say that, so the filer has a path.
 
 **`needs-human`** - and this is a SHORT list on purpose. Only:
@@ -68,14 +69,26 @@ already recorded there, it is not open - accept and cite it.
 
 ## The asymmetry on harness work
 
-Harness work is one-way (MISSION capability 10). **Adding** an assertion, an observable, a
-mutation, or a wider sample is `accepted` on sight with no gameplay justification.
+Harness work is one-way (<THE-HARNESS-IS-ONE-WAY-RULE>). **Adding** an assertion, an observable, a
+mutation, or a wider sample is `accepted` on sight with no product justification.
 **Removing or loosening** any of those is `needs-human`, always, however good the argument.
 
-## Bias
+## Bias, and it is narrower than it used to be
 
-Reject on ambiguity, deliberately. A false reject costs one comment and an appeal. A false
-accept costs a wrong branch, a validation cycle, and a merge nobody noticed.
+This said "reject on ambiguity, deliberately", full stop - which reads as licence to refuse
+anything unclear, and directly contradicts the needs-human list above. Both cannot be true.
+The distinction is **what** is ambiguous:
+
+- **Ambiguous SCOPE** - you cannot tell whether this is the product's job at all. Reject.
+  A false reject costs one comment and an appeal; a false accept costs a wrong branch, a
+  validation cycle and a merge nobody noticed.
+- **Ambiguous DETAIL** - clearly in scope, but a value, a wording or a behaviour is
+  unspecified. **Accept**, and say in the note which reading you took. The plan node
+  decides it, records the decision, and the merge is held for a human. Refusing here is
+  how a queue stops moving while every issue in it is perfectly buildable.
+
+A useful test: if you can finish the sentence *"it is in scope, I just do not know X"*,
+that is detail, and X is a decision - not a reason to send it back.
 
 ## Write `{{rundir}}/triage.json`, and nothing else
 
