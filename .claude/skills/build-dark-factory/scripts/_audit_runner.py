@@ -165,14 +165,28 @@ def audit_states(run: Path):
     T = ns["TRANSITIONS"]
 
     # 1. every literal state any script WRITES must exist in the table.
-    written: set[str] = set()
+    written: dict[str, list[str]] = {}
     for p in sorted(run.glob("*.sh")):
-        for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
+        for i, line in enumerate(p.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
             for mm in re.finditer(r"state\.py\"?\s+set\s+\S+\s+state=([a-z-]+)", line):
-                written.add(mm.group(1))
-    for st in sorted(written - set(T)):
-        finding(f"states: a script writes state={st!r}, which is not in TRANSITIONS -- "
-                f"the write fails and `set -e` kills the workflow before any escalate")
+                guarded = "||" in line or "&&" in line
+                written.setdefault(mm.group(1), []).append(
+                    f"{p.name}:{i}{' (guarded)' if guarded else ''}")
+    for st in sorted(set(written) - set(T)):
+        # The CONSEQUENCE differs and saying the wrong one sends the reader to the wrong
+        # file. An unguarded impossible write kills the workflow under `set -e` before any
+        # escalate. A `|| true` guarded one does not kill anything -- it silently does
+        # NOTHING, so the item keeps its previous state, which is usually the one nothing
+        # dispatches on. Both are bugs; only one is loud.
+        where = written[st]
+        if all("(guarded)" in w for w in where):
+            finding(f"states: a script writes state={st!r}, which is not in TRANSITIONS. "
+                    f"It is guarded, so it does not crash -- it silently does NOTHING and "
+                    f"the item keeps whatever state it already had: {where}")
+        else:
+            finding(f"states: a script writes state={st!r}, which is not in TRANSITIONS -- "
+                    f"the write fails and `set -e` kills the workflow before any "
+                    f"escalate: {where}")
 
     # 2. every state must be reachable from an entry point, or it is dead.
     def reach(start: str) -> set[str]:
