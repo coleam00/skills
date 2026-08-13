@@ -471,7 +471,10 @@ def main() -> int:
     for f in FINDINGS:
         print(f"  FIND  {f}")
     print()
-    print(f"{len(FINDINGS)} finding(s), {len(CHECKED)} audits ran")
+    # "checks" and not "audits": one audit function can report several checks, and calling
+    # them audits overstated the count. A tool whose entire argument is that a check must
+    # say what it actually verified does not get to be loose about its own summary line.
+    print(f"{len(FINDINGS)} finding(s) from {len(CHECKED)} checks")
     return len(FINDINGS)
 
 
