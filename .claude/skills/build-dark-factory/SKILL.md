@@ -109,8 +109,8 @@ machine in. They are not built in that order. Build in this order instead:
 | Build | Component | Why here |
 |---|---|---|
 | 0th | *(the PRD)* | Not a component. The input. Everything below reads it, and nothing below can be written honestly without it. |
-| 0.5th | *(the walking skeleton)* | **Greenfield only.** Not a component either, and deliberately tiny: the thinnest slice that yields one assertable behaviour. Component 5 cannot be written against software that does not exist. See Phase 0c - the danger is building the MVP here rather than a slice. |
 | 1st | **Guidance layer** (#4) | Markdown, and every other component reads it. The cheapest thing here with the highest leverage. |
+| 1.5th | *(the walking skeleton)* | **Greenfield only**, and AFTER the guidance layer, not before it - the slice should be built inside the mission's scope, and markdown needs no code to exist. Not a component; deliberately tiny, the thinnest slice that yields one assertable behaviour. Component 5 cannot be written against software that does not exist. See Phase 0c; the danger is building the MVP here rather than a slice. |
 | 2nd | **Validation harness** (#5) | The long pole. Start it before you need it, because you will be wrong about it twice. |
 | 3rd | **Workflow-driven repo** (#1) | Now the workflows have rules to obey and checks to pass. |
 | 4th | **Deployment** (#3) | Close the loop to real users before you make it unattended. |
@@ -139,6 +139,18 @@ It deliberately does **not** contain the tech stack, the architecture, the data 
 or the file layout. Those are engineering decisions, they come later, and in a factory
 they are usually decided on the first real run or already settled by the existing
 codebase. Asking for them here is how a PRD turns into a spec nobody can change.
+
+**When the PRD contains one anyway - and it usually will - treat it as SETTLED, not as
+scope, and say that you are doing so.** Someone who is not an engineer writes down the
+stack because it is the part they feel confident about; a career-changer's brief will name
+the framework, the host and a table sketch before it names a single non-goal. Arguing them
+out of it buys nothing and costs the room.
+
+So: take it as a decision already made, do not put it in `MISSION.md` (it is not scope and
+the factory must not defend it), and flag it in one line so it is a choice rather than
+something you quietly assumed. The one thing to check out loud is **reachability** - a
+stack that can only be exercised through a rendered page needs the logic split out behind
+something an E2E can call. See 0c.
 
 Read the PRD at `$prd` in full before asking a single question. Then map it:
 
@@ -274,16 +286,29 @@ That is still a large and valuable surface - usually most of the actual risk - b
 pretending it is the whole MVP is how you end up with a green factory shipping a game
 nobody wants to play.
 
-#### Then, in order
+#### Then, in this order - and the fork comes AFTER the interview
 
-1. **The skeleton** (small, above), with a test suite and one E2E that drives it.
-2. Everything else exactly as the construction order says: guidance layer → validation
-   harness → workflow repo → deployment → trigger.
+Say the two things above (the skeleton is a slice; the logic has to be reachable) **now**,
+in Phase 0, because both change what the user tells you in the interview. Then:
 
-#### Put the fork to the user with the question tool
+1. **Phase 1, the interview.** It is unchanged on greenfield.
+2. **Phase 2, the guidance layer.** Markdown, needs no code, and every later component
+   reads it - including the skeleton, which should be built inside the mission's scope
+   rather than alongside it. This is also the natural stopping point a greenfield user
+   might want, and putting the skeleton first removes it.
+3. **The skeleton**, named and sized against the journey from R1.1.
+4. Phase 3 onwards as written.
 
-This is a real decision with three known answers, so use `AskUserQuestion` (or the
-equivalent) rather than a paragraph, and **recommend the first**:
+**The fork below is presented after Phase 1, not here.** Its recommended option requires
+you to name the slice and name what you are leaving out, and you cannot do either honestly
+before R1.1 has told you what the journey is. Asking in Phase 0 gets a decision made on
+information nobody has yet. Flag in Phase 0 that the choice is coming; put it after the
+interview.
+
+#### The fork, once the interview has given you a journey
+
+Three known answers, so use `AskUserQuestion` (or the equivalent) rather than a paragraph,
+and **recommend the first**:
 
 1. **Build the thin skeleton now, then the factory on it** *(recommended)* - name the
    slice and name what you are leaving out, so "recommended" cannot be read as "I will

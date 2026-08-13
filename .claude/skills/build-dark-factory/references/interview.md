@@ -36,6 +36,18 @@ is not a style note:
 Where there is no such tool, ask in prose and mark the [PICKER] ones by listing the
 options with your recommendation first. Nothing here depends on the tool existing.
 
+**But degrade Round 3 differently, because a table is not a fallback for a widget.** With
+a picker, ten defaults is ten seconds and no reading. Rendered as prose it is a wall, and
+a real run produced exactly the failure the picker exists to prevent: the user skimmed it
+and said *"I don't have opinions on any of that, you pick"* - which loses the two or three
+she did have a view on. So with no picker available:
+
+> **Ask about three. State the rest as decisions you have made.** Pick the three most
+> likely to matter to *this* user - usually the protected paths, the notification channel,
+> and the stop button - and put them as three short questions. List the other seven as a
+> short paragraph of things you have set, with an invitation to change any of them. A
+> decision they can object to gets read; a table they must audit does not.
+
 ## Two rules that apply to every question below
 
 ### 1. Always carry a recommendation. Every question, including the prose ones.
@@ -83,6 +95,12 @@ The terms that need it, and how to say each in one breath:
 | **a structural gate** | A merge decision made by code, not by a model summarising its own work. Two of them must be code, or "it looks fine to me" is the whole gate. |
 | **the autonomy dial** | How much runs without you, 0 to 5. Level 3 is the one that matters: code merges without a human reading it. |
 | **E2E / the happy path** | One journey through your software the way a real user takes it, asserted end to end. Not a test per function - the single most valuable thing someone does. |
+| **`APP_STARTED` / proof it is running** | One specific thing your software says when it is genuinely up - a page that returns a known word, a command that prints a version. Without it, software that crashed on startup and software that is fine look identical to the checks, and "could not test it" gets counted as "nothing wrong". |
+
+**`APP_STARTED` is on that list because a real run showed it being rubber-stamped.** The
+user said *"sure, whatever you said, known address known response, fine"* - and it is one
+of only two gates that must be code. It sounds obvious to anyone who has run a service and
+means nothing to anyone who has not. Explain it before asking R2.3, not after.
 
 Use those words when the user is not technical, and use the precise ones when they are.
 Do not lecture: one breath, then the question, then offer more.
@@ -94,6 +112,22 @@ run.
 
 **Push back on vague answers.** A vague answer becomes an unenforceable rule, and an
 unenforceable rule is worse than none: it reads like a guarantee.
+
+### 3. Say where the finish line is, and say it again around question eight
+
+Attention runs out before the questions do. In a real run the user asked *"how much longer
+is this? I'm quite keen to see something on a screen"* immediately after R2.4 - question
+eight of twelve, and two questions before R2.5b, which is the one that produces the
+mutation set and the one you least want answered by somebody who has stopped thinking.
+
+The recovery that worked was **a named finish line plus a promise about the deliverable**:
+
+> "Two more real questions, then one list you skim and click through. Then we build. And
+> I'll say exactly what the first thing on the screen will be before I write anything."
+
+Not "a few more". A count they can hold. Say it when you start Round 2, and say it again
+if you sense drift - a user who keeps typing after they have disengaged is worse than one
+who says they are bored, because the answers keep coming and they stop being true.
 
 ---
 
@@ -144,7 +178,24 @@ which do you already rubber-stamp?"** The rubber-stamped ones are free autonomy 
 first. The ones they genuinely read are where the harness has to earn its place - and that
 answer is what the harness is *for* on this specific project.
 
-**Bad answer:** *"I just use Claude Code."* Push for the sequence. Everyone has one.
+**Bad answer:** *"I just use Claude Code."* Push once for the sequence - most people have
+more process than they think.
+
+**But some genuinely have none, and pushing at them is the exam this interview exists to
+avoid.** A career-changer's honest answer is *"I describe the thing, paste it in, run it,
+paste the error back."* There is no hidden sequence to excavate; saying "everyone has one"
+to that person just tells them they are answering wrong. Ask once, believe the second
+answer, and **reframe instead of digging**:
+
+> "That is a real process and it is the one we are automating. The difference is not that
+> your steps are wrong - it is that right now the only check is you looking at the result.
+> So the questions that follow are about building checks that are better than that look,
+> because that look is what disappears."
+
+Then take the workflows from the templates as a starting point rather than from them, and
+say that is what you are doing. A user with no process needs a proposal, exactly like
+every other question here: it is the one case where the default prompts in
+`templates/runner/factory/prompts/` are the answer rather than a worked example.
 
 ### [PICKER] R1.3 - "Are you willing to have code merge to main that no human has read?"
 
