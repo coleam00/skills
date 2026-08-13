@@ -1450,8 +1450,13 @@ MUTATIONS = [
         "test_harness_does_not_recurse_into_mutations", "harness"),
     Mutation(
         "quoted-path-unresolved", "ci.py",
-        'if len(head) > 1 and head[0] == head[-1] and head[0] in "\"\'":',
-        "if False:",
+        # Anchored on the de-quoting line rather than the `if` that guards it. The guard
+        # contains both quote characters AND a backslash, and the version of this string
+        # that went through several layers of escaping silently lost the backslash and
+        # matched nothing -- reported as SKIP, which is why SKIP is loud and is never
+        # counted as a pass. This line does the same job and contains no quotes at all.
+        "        head = head[1:-1]",
+        "        pass  # de-quoting removed by mutation",
         "shlex.split(posix=False) leaves the QUOTES on the token, so a correct command "
         "whose interpreter path contains a space died with the exact [WinError 2] that "
         "resolve() exists to prevent",
