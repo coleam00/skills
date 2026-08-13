@@ -210,6 +210,11 @@ look. Set `FACTORY_NOTIFY_CMD` in `factory/config.sh`; it receives the reason on
 the target as `$1`, and it is called from all three routes into `needs-human` (the runner,
 a blocked gate, and the fix-attempt cap).
 
+**The message arrives on STDIN.** `argv[1]` is only the target, for routing or a
+subject line. Every example below reads stdin; if you write your own and reach for
+`"$1"` by reflex - a one-line Slack curl is the obvious case - you get an alert whose
+whole body is `.factory/prs/0001.md`, which tells you something is wrong and not what.
+
 ```bash
 # Slack incoming webhook
 FACTORY_NOTIFY_CMD='xargs -0 -I{} curl -s -X POST -H "Content-type: application/json" \

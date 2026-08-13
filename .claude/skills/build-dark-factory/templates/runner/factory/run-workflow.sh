@@ -273,6 +273,41 @@ prepare_worktree_path() {   # prepare_worktree_path <path>
   return 0
 }
 
+# --- the per-target lock, for runs started BY HAND ---------------------------
+#
+# THE HOLE THIS CLOSES. The lock lived entirely in orchestrator.sh, so it protected two
+# dispatchers from each other and nothing else. But Phase 7 of the skill tells you to
+# "run the walking skeleton by hand: one real issue, all the way to a PR you merge
+# yourself" - and a hand-run invokes THIS script directly, taking no lock at all.
+#
+# So the documented human workflow bypassed the one mechanism that stops two runs
+# operating on the same target. Observed: a cron tick dispatched `triage issues/0011`
+# seventeen seconds before a hand-driven run of the same workflow on the same repo. The
+# second judges a tree the first is still writing, which is exactly what the lock exists
+# to prevent.
+#
+# When the orchestrator dispatched us it exports FACTORY_LOCK_HELD and we trust it - it
+# already holds the lock and releases it on its own trap. Otherwise we take one, with the
+# same key and the same atomic O_EXCL create, and release it on exit.
+if [ -z "${FACTORY_LOCK_HELD:-}" ]; then
+  SELF_LOCKDIR=".factory/locks-runtime"
+  mkdir -p "$SELF_LOCKDIR"
+  SELF_KEY="$(echo "${WORKFLOW}-${TARGET}" | tr '/.:' '---')"
+  SELF_LOCK="$SELF_LOCKDIR/$SELF_KEY.lock"
+  set -C
+  if ! echo "$$ $(date -u +%FT%TZ) hand-run" > "$SELF_LOCK" 2>/dev/null; then
+    set +C
+    echo "REFUSED: $WORKFLOW $TARGET is already in flight ($SELF_LOCK)."
+    echo "  Another run - a cron tick, or another terminal - holds this target. Two runs on"
+    echo "  one target means the second judges a tree the first is still editing."
+    echo "  Wait for it, or remove the lock if you know its process is gone."
+    exit 4
+  fi
+  set +C
+  trap 'rm -f "$SELF_LOCK"' EXIT INT TERM
+  log "LOCK_TAKEN $SELF_LOCK (hand-run)"
+fi
+
 # --- pre-flight, before anything that could commit ---------------------------
 # FACTORY_RULES.md 5.2. It mattered when this repo was local-only and it matters more
 # now: a `git add -A` that sweeps up a token no longer publishes it to a disk, it
@@ -665,8 +700,27 @@ PY
       || escalate "triage proposed an illegal transition to '$DEC_STATE'"
     log "TRIAGED $TARGET -> $DEC_STATE"
 
+    # A TRIAGE THAT DECIDES `needs-human` MUST REACH A HUMAN.
+    #
+    # This wrote the ledger line inline and stopped there, so `factory_notify` was never
+    # called: the notifier is reached only from `escalate()`, and `escalate()` fires on
+    # runner FAULTS - a node that crashed, unreadable JSON, an illegal transition. A
+    # successful triage that correctly decides "a human must look at this" is not a fault,
+    # so it took the one path that skips the alarm.
+    #
+    # Measured: seven probe issues, two correct `needs-human` decisions, **zero
+    # notifications** - the directory was never even created. The stop list worked
+    # perfectly and nobody was told. That is precisely what the comment on escalate()
+    # warns about: "if it cannot interrupt a human, unattended quietly means unmonitored".
+    #
+    # Not routed through `escalate()` itself, because that also flips the issue to
+    # `needs-human` (already done, through the transition table) and exits 3, which would
+    # turn a correct triage into a failed workflow. The notification is the only missing
+    # half, so that is the half added.
     if [ "$DEC_STATE" = "needs-human" ]; then
-      echo "- $(date -u +%FT%TZ)  $TARGET  (triage)  escalated at triage" >> .factory/needs-human.md
+      TRIAGE_WHY="$(python -c "import json,sys;print((json.load(open(sys.argv[1],encoding='utf-8')).get('note') or 'escalated at triage').strip().replace(chr(10),' ')[:300])" "$DEC" 2>/dev/null || echo "escalated at triage")"
+      echo "- $(date -u +%FT%TZ)  $TARGET  (triage)  $TRIAGE_WHY" >> .factory/needs-human.md
+      log "$(factory_notify "$TARGET" "(triage) $TRIAGE_WHY")"
     fi
     ;;
 

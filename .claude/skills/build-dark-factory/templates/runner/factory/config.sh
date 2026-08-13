@@ -14,6 +14,13 @@
 # Whatever is already authenticated on the machine that will run this. Not the best one.
 # The factory shells out to a command and reads an exit code, so this is genuinely
 # swappable in an afternoon - see references/automation.md for each agent's flags.
+#
+# ONE EXECUTABLE, NO ARGUMENTS. `run-workflow.sh` invokes this as "$AGENT" -p ... , so the
+# whole value is treated as a single command name. `FACTORY_AGENT="npx some-agent"` or
+# `"bash ./my-agent.sh"` fails with `No such file or directory` naming the entire string -
+# which reads as "the agent is not installed" for something that runs fine when you type
+# it. If you need arguments or a wrapper, write a one-line executable script and point
+# this at that:  FACTORY_AGENT="./factory/my-agent.sh"  (with a shebang, and chmod +x).
 FACTORY_AGENT="${FACTORY_AGENT:-claude}"
 
 # Two slots decide quality: the one that PLANS and the one that IMPLEMENTS. A premium
@@ -162,6 +169,16 @@ FACTORY_NOTIFY_CMD="${FACTORY_NOTIFY_CMD:-}"
 #
 # Never fatal. An escalation whose webhook is down is still an escalation; the file write
 # has already happened by the time this is called.
+# THE CONTRACT, because getting it wrong produces a useless notification rather than none:
+#
+#   STDIN   "<target> needs a human: <reason>"   <- the whole message. Read this.
+#   argv[1] "<target>"                           <- for routing or a subject line only
+#
+# Every example in references/setup.md reads stdin (`xargs`, `curl -d @-`, `tee`) and is
+# correct. Somebody writing their own reaches for "$1" by reflex - a one-line Slack curl
+# is the obvious case - and gets a 3am alert whose entire body is `.factory/prs/0001.md`:
+# it tells you something is wrong and not what, which is close to no notification at all.
+# Observed while testing this path. If you write your own, read stdin.
 factory_notify() {              # factory_notify <target> <reason...>
   local target="$1"; shift
   if [ -z "${FACTORY_NOTIFY_CMD:-}" ]; then

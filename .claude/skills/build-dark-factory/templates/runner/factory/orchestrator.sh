@@ -130,6 +130,43 @@ $(python factory/state.py next 2>/dev/null | grep '^stalled' | cut -f2 || true)
 EOF
 fi
 
+mkdir -p "$LOCKDIR"
+STALE_MIN="${FACTORY_LOCK_STALE_MINUTES:-180}"
+while read -r deadlock; do
+  [ -n "${deadlock:-}" ] || continue
+  log "LOCK_REAPED $(basename "$deadlock") - older than ${STALE_MIN}m, so its workflow is gone. Held since: $(head -1 "$deadlock" 2>/dev/null)"
+  rm -f "$deadlock"
+done <<EOF
+$(find "$LOCKDIR" -name '*.lock' -mmin "+$STALE_MIN" 2>/dev/null || true)
+EOF
+
+# --- the faster reap: the owning PROCESS is already gone ----------------------
+#
+# Age alone is too slow for the common case. The release is a trap, and a trap does not
+# run when the process is killed rather than exited - close the terminal, reboot, or let
+# a parent shell exit and take its detached child with it, which is exactly how a
+# hand-driven queue loop leaves locks behind. The target is then blocked for the full
+# STALE_MIN (three hours by default) for a workflow that died seconds ago.
+#
+# The PID was already being written into the lock and nothing read it. Reading it needs a
+# guard against PID REUSE, so BOTH must hold: the process is not alive, AND the lock has
+# had time to be real (GRACE_MIN, default 5). A live long lap is never touched, because
+# its PID is alive - that is the check that matters, and age is only the tiebreaker.
+GRACE_MIN="${FACTORY_LOCK_GRACE_MINUTES:-5}"
+while read -r maybe; do
+  [ -n "${maybe:-}" ] || continue
+  lpid="$(head -1 "$maybe" 2>/dev/null | cut -d' ' -f1)"
+  case "$lpid" in ''|*[!0-9]*) continue ;; esac      # no readable pid: leave it to age
+  if kill -0 "$lpid" 2>/dev/null; then
+    continue                                          # owner alive - a real run in flight
+  fi
+  log "LOCK_REAPED $(basename "$maybe") - its process ($lpid) is gone and the lock is over ${GRACE_MIN}m old"
+  rm -f "$maybe"
+done <<EOF
+$(find "$LOCKDIR" -name '*.lock' -mmin "+$GRACE_MIN" 2>/dev/null || true)
+EOF
+
+
 # =============================================================================
 # 2. THE AUTONOMY DIAL. The factory does only what the dial permits.
 # =============================================================================
@@ -164,15 +201,6 @@ mkdir -p "$LOCKDIR"
 # test and the safe one: PIDs are reused, and a liveness check that gets it wrong kills a
 # running lap. A lock older than the cap cannot belong to a live workflow -- measured laps
 # run 6 to 20 minutes and the cost cap bounds them well below three hours.
-STALE_MIN="${FACTORY_LOCK_STALE_MINUTES:-180}"
-while read -r deadlock; do
-  [ -n "${deadlock:-}" ] || continue
-  log "LOCK_REAPED $(basename "$deadlock") - older than ${STALE_MIN}m, so its workflow is gone. Held since: $(head -1 "$deadlock" 2>/dev/null)"
-  rm -f "$deadlock"
-done <<EOF
-$(find "$LOCKDIR" -name '*.lock' -mmin "+$STALE_MIN" 2>/dev/null || true)
-EOF
-
 IN_FLIGHT=$(find "$LOCKDIR" -name '*.lock' 2>/dev/null | wc -l | tr -d ' ')
 if [ "$IN_FLIGHT" -ge "$MAX_PARALLEL" ]; then
   log "at capacity ($IN_FLIGHT/$MAX_PARALLEL), nothing dispatched"
@@ -221,8 +249,11 @@ dispatch() {            # dispatch <workflow> <target-file>
   # then at capacity forever: every later run logged "at capacity (1/1), nothing
   # dispatched" and exited 0. A factory wedged that way looks exactly like a factory with
   # nothing to do, which is the one failure mode this whole system exists to avoid.
+  # FACTORY_LOCK_HELD tells run-workflow.sh that its lock is already held by us, so it
+  # does not try to take a second one. A run started BY HAND has no such variable and
+  # acquires its own - see the block at the top of run-workflow.sh.
   ( trap 'rm -f "$lock"' EXIT INT TERM
-    bash "$RUNNER" "$wf" "$target" ) \
+    FACTORY_LOCK_HELD="$lock" bash "$RUNNER" "$wf" "$target" ) \
     >> "factory-$key.log" 2>&1 &
 }
 
