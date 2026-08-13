@@ -1,0 +1,402 @@
+#!/usr/bin/env python3
+"""Structural invariants of the runner that no behaviour test can express.
+
+    python scripts/_audit_runner.py            # audit the shipped template
+    python scripts/_audit_runner.py --repo R   # audit a factory BUILT from it
+    python scripts/_audit_runner.py --quiet    # findings only
+
+`_test_runner.py` proves the runner BEHAVES. This proves things about its shape that only
+become bugs later, and it exists because every one of these was a real defect found by
+hand: a knob read by a child process that config.sh never exported, a prompt placeholder
+the renderer does not substitute, a state nothing dispatches on, a `grep` whose failure
+kills the script before the escalate on the next line.
+
+The difference from `factory_doctor.py` is the subject. The doctor audits YOUR repo -- is
+there a holdout, is the dial honest, is the scaffold edited. This audits the MACHINERY, and
+its findings are bugs in the factory rather than gaps in your setup. Both ship, because a
+correctly configured repo running broken machinery passes every check the doctor has.
+
+Exit code is the number of findings, so it can gate a commit.
+
+Each audit prints what it CHECKED even when it finds nothing. An audit that silently passes
+is indistinguishable from one that did not run -- the same "empty is not pass" rule the
+gate applies to your test output, applied here.
+"""
+from __future__ import annotations
+
+import argparse
+import collections
+import io
+import re
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+SKILL = HERE.parent
+
+# Names that look like config but are the shell's own, or are bound by a `for`/`read`, or
+# are passed inline on a command. Kept explicit: a blanket "ignore unknown" would hide the
+# exact defect this audit exists to catch.
+SHELL_OWNED = {
+    "PATH", "HOME", "PWD", "IFS", "OSTYPE", "BASH_SOURCE", "BASH_COMMAND", "BASH_VERSION",
+    "RANDOM", "PPID", "UID", "SECONDS", "LINENO", "FUNCNAME", "TMPDIR", "TEMP", "TMP",
+    "USERPROFILE", "APPDATA", "LOCALAPPDATA", "SYSTEMROOT", "COMSPEC", "OS", "SHELL",
+    "USER", "LOGNAME", "TERM", "EDITOR", "LC_ALL", "LANG", "PYTHONIOENCODING",
+    "PYTHONPATH", "PYTHONUTF8", "GIT_DIR", "GH_TOKEN", "GITHUB_TOKEN",
+}
+
+FINDINGS: list[str] = []
+CHECKED: list[str] = []
+
+
+def finding(msg: str):
+    FINDINGS.append(msg)
+
+
+def checked(msg: str):
+    CHECKED.append(msg)
+
+
+def need(run: Path, name: str, why: str) -> str | None:
+    """Read a runner file, or record WHY the audit could not run.
+
+    A checker that tracebacks on an unfamiliar repo tells you nothing at all, which is the
+    same failure as a gate that passes because nothing ran. Factories built from older
+    templates are missing whole files -- north-star-arena has no `config.sh`, because it
+    predates the extraction of one -- and that is a finding, not a crash.
+    """
+    p = run / name
+    if not p.exists():
+        finding(f"layout: this factory has no `factory/{name}`, so {why} cannot be "
+                f"checked. It predates the template that ships one; port it before "
+                f"trusting any audit result here")
+        return None
+    return p.read_text(encoding="utf-8", errors="replace")
+
+
+def logical_lines(text: str):
+    """Join `\\` continuations, so a guard on the next physical line still counts."""
+    out, buf, start = [], "", 1
+    for i, line in enumerate(text.splitlines(), 1):
+        if not buf:
+            start = i
+        s = line.rstrip()
+        if s.endswith("\\"):
+            buf += s[:-1] + " "
+            continue
+        out.append((start, buf + s))
+        buf = ""
+    if buf:
+        out.append((start, buf))
+    return out
+
+
+# =============================================================================
+def audit_config(run: Path):
+    """A knob that is read by a child process but never exported does NOTHING.
+
+    Real defect: `guard.py` reads the size and file caps from the environment, and
+    config.sh -- "the one file you edit" -- exported nothing. Editing a SAFETY limit
+    changed no behaviour whatsoever, silently.
+    """
+    cfg = need(run, "config.sh", "the knobs users are told to edit")
+    if cfg is None:
+        return
+    defined = set(re.findall(r"^\s*([A-Z][A-Z0-9_]*)=", cfg, re.M))
+    exported: set[str] = set()
+    for m in re.finditer(r"^\s*export\s+((?:[^\n]*\\\n)*[^\n]*)$", cfg, re.M):
+        exported |= set(re.findall(r"\b([A-Z][A-Z0-9_]*)\b", m.group(1)))
+
+    read_py: dict[str, set[str]] = collections.defaultdict(set)
+    read_sh: dict[str, set[str]] = collections.defaultdict(set)
+    for p in sorted(run.rglob("*")):
+        if not p.is_file() or p.suffix not in (".sh", ".py"):
+            continue
+        s = p.read_text(encoding="utf-8", errors="replace")
+        rel = p.relative_to(run).as_posix()
+        if p.suffix == ".py":
+            for v in re.findall(r"environ(?:\.get)?\(\s*[\"']([A-Z][A-Z0-9_]*)[\"']", s):
+                read_py[v].add(rel)
+            for v in re.findall(r"getenv\(\s*[\"']([A-Z][A-Z0-9_]*)[\"']", s):
+                read_py[v].add(rel)
+        else:
+            for v in re.findall(r"\$\{?([A-Z][A-Z0-9_]{2,})\b", s):
+                read_sh[v].add(rel)
+
+    for v in sorted(read_py):
+        if v in SHELL_OWNED:
+            continue
+        if (v.startswith("FACTORY_") or v in defined) and v not in exported:
+            where = "defined but NOT exported" if v in defined else "never defined at all"
+            finding(f"config: {v} is read by {sorted(read_py[v])} from the environment "
+                    f"but is {where} in config.sh -- editing it does nothing")
+
+    # A FACTORY_* knob read in shell that config.sh does not define is an undocumented
+    # knob: it works, but it cannot be found in the file users are told to edit.
+    for v in sorted(read_sh):
+        if not v.startswith("FACTORY_") or v in defined or v in SHELL_OWNED:
+            continue
+        if v == "FACTORY_LOCK_HELD":     # passed inline by the dispatcher, never config
+            continue
+        finding(f"config: {v} is read by {sorted(read_sh[v])} but config.sh never "
+                f"defines it -- an undocumented knob is one nobody can find")
+
+    dead = sorted(v for v in defined
+                  if v.startswith("FACTORY_") and v not in read_sh and v not in read_py)
+    for v in dead:
+        finding(f"config: {v} is defined in config.sh and read NOWHERE -- a knob that "
+                f"does nothing is a lie in the one file users edit")
+    checked(f"config: {len(defined)} knobs defined, {len(exported)} exported, "
+            f"{len(read_sh)} read in shell, {len(read_py)} read by python children")
+
+
+# =============================================================================
+def audit_states(run: Path):
+    """A state nothing can leave, or nothing acts on, is where the queue stops silently."""
+    src = need(run, "state.py", "the state machine")
+    if src is None:
+        return
+    m = re.search(r"^TRANSITIONS = \{.*?^\}", src, re.S | re.M)
+    if not m:
+        finding("states: TRANSITIONS table not found in state.py")
+        return
+    ns: dict = {}
+    exec(m.group(0), ns)                                   # noqa: S102 - our own template
+    T = ns["TRANSITIONS"]
+
+    # 1. every literal state any script WRITES must exist in the table.
+    written: set[str] = set()
+    for p in sorted(run.glob("*.sh")):
+        for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
+            for mm in re.finditer(r"state\.py\"?\s+set\s+\S+\s+state=([a-z-]+)", line):
+                written.add(mm.group(1))
+    for st in sorted(written - set(T)):
+        finding(f"states: a script writes state={st!r}, which is not in TRANSITIONS -- "
+                f"the write fails and `set -e` kills the workflow before any escalate")
+
+    # 2. every state must be reachable from an entry point, or it is dead.
+    def reach(start: str) -> set[str]:
+        seen, stack = {start}, [start]
+        while stack:
+            for nxt in T.get(stack.pop(), set()):
+                if nxt not in seen:
+                    seen.add(nxt)
+                    stack.append(nxt)
+        return seen
+
+    live = reach("untriaged") | reach("open")
+    # closed-unlabelled is produced by the GitHub backend from a closed issue, never
+    # reached by a transition. Checked explicitly rather than special-cased silently.
+    ghsrc = (run / "gh_backend.py")
+    produced_by_backend = set(re.findall(
+        r'return "([a-z-]+)"',
+        ghsrc.read_text(encoding="utf-8", errors="replace") if ghsrc.exists() else ""))
+    for st in sorted(set(T) - live - produced_by_backend):
+        finding(f"states: {st!r} is in the table, reachable from no entry point and "
+                f"produced by no backend -- dead")
+
+    # 3. every state with live exits must be ACTED on by something.
+    nxt_src = re.search(r"def cmd_next.*?(?=\ndef |\Z)", src, re.S)
+    nxt = nxt_src.group(0) if nxt_src else ""
+    orch = need(run, "orchestrator.sh", "which states are dispatched on")
+    if orch is None:
+        return
+    for st in sorted(T):
+        if not T[st] or T[st] == {"needs-human"}:
+            continue                                        # terminal / human-only, fine
+        if re.search(rf"[\"']{re.escape(st)}[\"']", nxt) or re.search(rf"\b{re.escape(st)}\b", orch):
+            continue
+        if st in produced_by_backend:
+            continue                                        # a transient read state
+        finding(f"states: {st!r} has live exits {sorted(T[st])} but nothing dispatches "
+                f"on it and nothing sweeps it -- work in it stops silently")
+    checked(f"states: {len(T)} states, {sum(len(v) for v in T.values())} legal "
+            f"transitions, {len(written)} written by shell -- all reachable and acted on")
+
+
+# =============================================================================
+def audit_placeholders(run: Path):
+    """A prompt placeholder the renderer does not substitute is a prompt that LIES.
+
+    Real defect: the fix node asked for the validator's findings at
+    `.factory/runs/{{prev_run}}/verdict.json`. Nothing substituted it. The node opened
+    nothing, said nothing, and fixed from the diff -- confident and unfounded.
+    """
+    runner = need(run, "run-workflow.sh", "prompt rendering")
+    if runner is None:
+        return
+    subs = set(re.findall(r"\{\{(\w+)\}\}", runner))
+    used: dict[str, set[str]] = collections.defaultdict(set)
+    pdir = run / "prompts"
+    if not pdir.is_dir():
+        finding("layout: no `factory/prompts/` directory -- the node prompts cannot be "
+                "checked against what the runner substitutes")
+        return
+    for p in sorted(pdir.glob("*.md")):
+        for ph in re.findall(r"\{\{(\w+)\}\}", p.read_text(encoding="utf-8")):
+            used[ph].add(p.name)
+    for ph in sorted(used):
+        if ph not in subs:
+            finding(f"prompts: {{{{{ph}}}}} is used by {sorted(used[ph])} and the runner "
+                    f"never substitutes it -- the node reads a path that was never filled in")
+    if not re.search(r"grep -qE '\\\{\\\{", runner) and "unrendered" not in runner.lower():
+        finding("prompts: the runner has no fatal check for an unrendered placeholder, "
+                "so the next one fails silently like the last one did")
+    checked(f"prompts: {len(used)} placeholders used across {len(list(pdir.glob('*.md')))} "
+            f"prompts, {len(subs)} substituted by the runner")
+
+
+# =============================================================================
+def audit_silent_death(run: Path):
+    """`set -e` kills the script BEFORE the escalate on the next line.
+
+    THE recurring defect of this project, found four times as instances before anyone
+    looked for the shape. Two forms are flagged: an unguarded state mutation, and a bare
+    `grep` whose non-match is fatal. Both are invisible when they fire.
+    """
+    for p in sorted(run.glob("*.sh")):
+        text = p.read_text(encoding="utf-8", errors="replace")
+        if not re.search(r"^set -[a-z]*e", text, re.M):
+            continue
+        has_trap = bool(re.search(r"^\s*trap\s+.*\bERR\b", text, re.M))
+        called_guarded = p.name in {"gate.sh", "merge.sh", "deploy.sh", "init-labels.sh",
+                                    "install-trigger.sh"}
+        if not has_trap and not called_guarded:
+            finding(f"{p.name}: runs under `set -e` with no ERR trap, so an unguarded "
+                    f"failure exits with no message, no state change and no notification")
+        for lineno, l in logical_lines(text):
+            s = l.strip()
+            if not s or s.startswith("#"):
+                continue
+            if re.search(r"state\.py\"?\s+(set|bump-attempt)\b", s) \
+                    and "||" not in s and "&&" not in s \
+                    and not s.startswith(("if ", "elif ")):
+                finding(f"{p.name}:{lineno}: unguarded state write -- if it fails, "
+                        f"`set -e` skips whatever follows it (ledger, notification):\n"
+                        f"      {s[:100]}")
+            if re.match(r"^(grep|rg)\s", s) and "||" not in s and "&&" not in s:
+                finding(f"{p.name}:{lineno}: a bare grep is fatal on no-match under "
+                        f"`set -e`:\n      {s[:100]}")
+    checked(f"silent death: {len(list(run.glob('*.sh')))} shell scripts scanned for "
+            f"unguarded state writes, bare greps and a missing ERR trap")
+
+
+# =============================================================================
+def audit_escalation_routes(run: Path):
+    """Every place that STOPS work must tell a human. Found broken four separate times.
+
+    `needs-human` is the only state a human must act on, so it is the only state allowed
+    to interrupt one. A route that parks work and notifies nobody makes "unattended"
+    quietly mean "unmonitored".
+    """
+    routes = 0
+    for p in sorted(run.glob("*.sh")):
+        text = p.read_text(encoding="utf-8", errors="replace")
+        for lineno, l in logical_lines(text):
+            if "state=needs-human" not in l:
+                continue
+            routes += 1
+            # the notification does not have to be on the same line, but it does have to
+            # be in the same block -- 25 lines is generous and has caught every real one.
+            lines = text.splitlines()
+            window = "\n".join(lines[max(0, lineno - 6): lineno + 25])
+            if "factory_notify" not in window:
+                finding(f"{p.name}:{lineno}: parks work at needs-human with no "
+                        f"factory_notify anywhere near it -- a stop nobody is told about")
+    checked(f"escalation: {routes} routes to needs-human, each reaching factory_notify")
+
+
+# =============================================================================
+def audit_backend_parity(run: Path):
+    """The file backend and the GitHub backend must answer the same verbs.
+
+    A verb that exists on one and not the other means the factory behaves differently
+    depending on where its issues live, which is exactly how `factory:approved` came to
+    be missing: a fresh GitHub factory worked right up to its first green gate.
+    """
+    gh = need(run, "gh_backend.py", "the GitHub backend")
+    labels_sh = need(run, "init-labels.sh",
+                     "whether every state's label is created before it is written")
+    if gh is None or labels_sh is None:
+        return
+    lfs = re.search(r"LABEL_FOR_STATE\s*=\s*\{(.*?)\}", gh, re.S)
+    pairs = re.findall(r"\"([a-z-]+)\"\s*:\s*\"([^\"]+)\"", lfs.group(1)) if lfs else []
+    for st, lab in pairs:
+        if lab not in labels_sh:
+            finding(f"backend: state {st!r} maps to label {lab!r}, which "
+                    f"init-labels.sh never creates -- the first write of that state fails")
+    checked(f"backend: {len(pairs)} state->label mappings, all created by init-labels.sh")
+
+
+# =============================================================================
+def audit_prompt_citations(run: Path, repo: Path | None):
+    """A prompt citing a rule that does not exist teaches the node to invent one.
+
+    Real defect: the shipped prompts cited `OS9`, `capability 10`, `I5` and "playthrough"
+    -- 12 references across 5 prompts to sections of ANOTHER factory's MISSION.
+    """
+    rules_path = None
+    for cand in ((repo / "FACTORY_RULES.md") if repo else None,
+                 SKILL / "templates" / "FACTORY_RULES.md"):
+        if cand and cand.exists():
+            rules_path = cand
+            break
+    if not rules_path:
+        return
+    rules = rules_path.read_text(encoding="utf-8")
+    secs = set(re.findall(r"^#{1,4}\s*(\d+(?:\.\d+)*)", rules, re.M))
+    secs |= set(re.findall(r"^##\s*(\d+)\.", rules, re.M))
+    n = 0
+    if not (run / "prompts").is_dir():
+        return
+    for p in sorted((run / "prompts").glob("*.md")):
+        s = p.read_text(encoding="utf-8")
+        for mm in re.finditer(r"FACTORY_RULES(?:\.md)?[^\n]{0,12}?(?:§|section\s*|\s)"
+                              r"(\d+(?:\.\d+)*)", s):
+            n += 1
+            sec = mm.group(1)
+            if sec not in secs and sec.split(".")[0] not in secs:
+                finding(f"prompts/{p.name}: cites FACTORY_RULES {sec}, which does not "
+                        f"exist in {rules_path.name}")
+    checked(f"citations: {n} FACTORY_RULES references across the prompts, all resolving")
+
+
+# =============================================================================
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--repo", help="audit a BUILT factory instead of the template")
+    ap.add_argument("--quiet", action="store_true", help="findings only")
+    args = ap.parse_args()
+
+    if args.repo:
+        run = Path(args.repo).resolve() / "factory"
+        repo = Path(args.repo).resolve()
+    else:
+        run = SKILL / "templates" / "runner" / "factory"
+        repo = None
+    if not (run / "run-workflow.sh").exists():
+        print(f"no runner at {run}", file=sys.stderr)
+        return 2
+
+    print(f"auditing {run}")
+    print()
+    for fn, needs_repo in ((audit_config, False), (audit_states, False),
+                           (audit_placeholders, False), (audit_silent_death, False),
+                           (audit_escalation_routes, False), (audit_backend_parity, False)):
+        fn(run)
+    audit_prompt_citations(run, repo)
+
+    if not args.quiet:
+        for c in CHECKED:
+            print(f"  ok    {c}")
+        print()
+    for f in FINDINGS:
+        print(f"  FIND  {f}")
+    print()
+    print(f"{len(FINDINGS)} finding(s), {len(CHECKED)} audits ran")
+    return len(FINDINGS)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

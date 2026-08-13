@@ -43,6 +43,34 @@ LOCKDIR=".factory/locks-runtime"
 
 log() { echo "[$(date -u +%FT%TZ)] $*"; }
 
+# THE SAME BACKSTOP run-workflow.sh CARRIES, one level up, and it matters MORE here.
+#
+# This script is the scheduled entry point. Nothing supervises it: cron or Task Scheduler
+# starts it, it exits, and the exit code goes nowhere anyone looks. So an unguarded command
+# failing under `set -e` does not lose one workflow, it loses THE WHOLE TICK -- the reaper,
+# the stalled sweep, and every dispatch after the failing line -- and the next tick starts
+# from scratch and usually fails at the same place. A factory that has been dead for a week
+# looks exactly like a factory with nothing to do.
+#
+# Found by `scripts/_audit_runner.py` on its first run, in the gap left by fixing the
+# runner and not its dispatcher.
+#
+# It cannot change control flow: `set -e` already ends the tick at exactly these points.
+# It makes the ending say why, and tells a human, because a dispatcher that has stopped
+# dispatching is the one failure nothing else in this system can report.
+on_dispatcher_fault() {   # on_dispatcher_fault <rc> <line> <command>
+  trap - ERR
+  log "DISPATCHER_FAULT line $2 exited $1: $3"
+  log "  The tick ended here. Anything after this line did not run - locks were not"
+  log "  reaped, stalls were not swept, and nothing further was dispatched."
+  mkdir -p "$(dirname "$FACTORY_STOP_FILE")" 2>/dev/null || true
+  echo "- $(date -u +%FT%TZ)  (orchestrator)  dispatcher fault at line $2: $3" \
+    >> .factory/needs-human.md 2>/dev/null || true
+  log "$(factory_notify "orchestrator" "the dispatcher itself failed at line $2 running: $3")" || true
+  exit 1
+}
+trap 'on_dispatcher_fault "$?" "$LINENO" "$BASH_COMMAND"' ERR
+
 # =============================================================================
 # 1. THE STOP BUTTON. Checked first, every time, before anything else is read.
 # =============================================================================

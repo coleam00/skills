@@ -636,6 +636,14 @@ the evidence that earns it, not a ladder to stop partway up.
 2. `python scripts/factory_doctor.py --repo <path> --audit` until it is clean. It refuses
    level 3 while there is no holdout, which is the check that decides whether the rest of
    this was real.
+2b. **`python scripts/_test_runner.py --repo <path>`** and
+   **`python scripts/_audit_runner.py --repo <path>`**. The doctor checks that the repo is
+   set up correctly; these check that the machinery underneath it still works. They are
+   free, they take about two minutes, and a factory that fails them will fail *silently* -
+   parking work nobody is told about, or re-running a workflow that can only die. Re-run
+   both any time you hand-edit anything under `factory/`, and before re-arming a factory
+   that has been idle: the runner is copied into a repo and never linked, so a fix upstream
+   has not reached yours.
 3. Raise the dial to 1, then 2, watching one full cycle at each - then **raise it to 3**.
    Stopping at 2 leaves a person merging every PR, which is the bottleneck the whole build
    was for. If the user chooses to stop below 3, write down in `FACTORY.md` what would
@@ -708,3 +716,38 @@ the evidence that earns it, not a ladder to stop partway up.
   breaks one thing at a time, and requires the doctor to notice. Run it after changing
   the doctor. A gate that has never failed is a gate nobody has tested, and that applies
   to this skill's gate too.
+- **`scripts/_test_runner.py`**: the runner's behaviour suite, and the answer to "is this
+  factory actually sound?" It builds a real git repo with the real `factory/` in it, stubs
+  the agent and the validator so a full lap is free and deterministic, and then drives the
+  actual shell scripts. Every test is named after the defect it locks.
+
+  ```bash
+  python scripts/_test_runner.py                    # the shipped template
+  python scripts/_test_runner.py --repo <path>      # a factory somebody BUILT
+  python scripts/_test_runner.py --mutate           # do the tests catch anything?
+  ```
+
+  **`--repo` is the one to remember.** The runner is COPIED into a repo and never linked,
+  so a fix to this template reaches nothing already built, and a hand-edited factory drifts
+  with nothing watching. Run it against a factory before trusting it unattended again.
+
+  **`--mutate` is what keeps the suite honest.** It restores each historical defect into a
+  throwaway copy and requires the suite to go RED. A test whose defect can be put back
+  while everything stays green is decoration, and it is named as such. This is the same
+  argument the skill makes about mutation-testing your product, turned on itself - and it
+  has already caught one test here passing for the wrong reason.
+- **`scripts/_audit_runner.py`**: the structural invariants no behaviour test can express -
+  a knob read by a child process that `config.sh` never exported, a prompt placeholder the
+  renderer does not substitute, a state nothing dispatches on, an unguarded command that
+  dies before the escalate on the next line. `--repo` works here too. Where
+  `factory_doctor` audits YOUR repo, this audits the MACHINERY: its findings are bugs in
+  the factory rather than gaps in your setup, and a correctly configured repo running
+  broken machinery passes every check the doctor has.
+
+> **Why these two exist.** For weeks the same four failure shapes kept reappearing in this
+> runner, each found by hand and fixed as a one-off. The reason is the one this skill
+> spends five phases making about your code: there was no harness. ~4,200 lines of runner
+> shipped with nothing that ever *executed* it, so every fix was a sentence in a document
+> rather than a thing that goes red. If you take one idea from this skill into your own
+> repo, take that one - and notice that it applies to the tools you build as much as to the
+> product they build.
