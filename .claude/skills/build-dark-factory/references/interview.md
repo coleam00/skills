@@ -148,258 +148,219 @@ after three questions, these are the three you needed.
 > failure: the agent builds the MVP by hand so the harness has something to test, and the
 > factory inherits the leftovers.
 
-### R1.1 - "Describe the single most valuable thing a user does with this app, as a sequence of actions ending in something you can see."
+### R1.1 - "Walk me through the single most useful thing someone does with this, from the first click to the thing they end up looking at."
 
-*The* question. The answer becomes the E2E happy path, which is the only check with real
-authority, and it is what `harness/e2e.py` gets rewritten into.
+*The* question. The answer becomes the main path the factory checks on every change.
 
-Force it concrete. Not "users can search." Instead: *open the app → sign in as a test user
-→ type a query with a known answer → the response streams in → it renders with a citation
-→ click the citation → a modal opens at the right timestamp.*
+Force it concrete. Not "users can search", but: *open the app -> sign in -> type a query
+with a known answer -> the response streams in -> it shows a citation -> click it -> a
+window opens at the right spot.*
 
-**Bad answer:** any description that never mentions something observable. If it cannot be
-observed it cannot be asserted, and the agent will claim it works.
+**Draft it from their PRD first.** The MVP section is usually most of this already. Offer
+that as the recommended option and ask what is wrong with it.
 
-### R1.2 - "Walk me through how you build a feature with AI today, step by step."
+**Bad answer:** anything with nothing you could point at on a screen. If you cannot see it,
+nothing can check it, and the agent will tell you it works.
 
-Let this run long. **The workflows are that process with the approvals removed, not a new
-pipeline the user has to learn.** Most people have more process than they think and have
-never written it down. Draw it out and name each step:
+### R1.2 - "How do you build a feature with AI today?"
 
-- **Planning.** Do they write a plan first? From what? Does anything read it back?
-- **Implementation.** One pass, or sliced? What decides the slice?
-- **Review.** What do they look at, and what makes them send it back?
-- **The tooling at each step.** Which skills, commands, subagents, MCP servers and rules
-  files load where. Get specifics, then go and look - `CLAUDE.md`, `AGENTS.md`, `.claude/`
-  and `.cursor/` are usually already in the repo, and that is the answer sitting there.
-- **A named framework, if any.** Spec Kit, BMAD, a PRP framework, an in-house SDLC. If
-  they have one, it *is* the answer, and the job is to encode it faithfully.
+Let this run long, and **do not interrogate**. One open question with a drafted answer, not
+a five-part questionnaire about planning, implementation, review, tooling and frameworks.
+Take what they give you, then go and look: `CLAUDE.md`, `AGENTS.md`, `.claude/`, `.cursor/`
+are usually in the repo already and answer the tooling half without asking anything.
 
-Then say it out loud: *every one of those steps becomes a node, and the only difference is
-that nobody clicks approve between them.*
+Then say it once, plainly: *every step you just described becomes a step the factory runs,
+and the only difference is that nobody clicks approve between them.*
 
-Follow up with the sharp version: **"which of those steps are you actually reviewing, and
-which do you already rubber-stamp?"** The rubber-stamped ones are free autonomy and go
-first. The ones they genuinely read are where the harness has to earn its place - and that
-answer is what the harness is *for* on this specific project.
+One follow-up, because it is worth more than the rest: **"which of those steps do you
+actually read, and which do you just approve?"** The rubber-stamped ones are free
+autonomy. The ones they genuinely read are where the checking has to get good.
 
-**Bad answer:** *"I just use Claude Code."* Push once for the sequence - most people have
-more process than they think.
+**If they have no process** - *"I describe the thing, paste it in, run it, paste the error
+back"* - that is a real answer and it is the one being automated. Do not dig. Say:
 
-**But some genuinely have none, and pushing at them is the exam this interview exists to
-avoid.** A career-changer's honest answer is *"I describe the thing, paste it in, run it,
-paste the error back."* There is no hidden sequence to excavate; saying "everyone has one"
-to that person just tells them they are answering wrong. Ask once, believe the second
-answer, and **reframe instead of digging**:
+> "That is the process, and we are automating it. The only difference is that right now the
+> check is you looking at the result - so the next few questions are about building checks
+> that are better than that look, because that look is what goes away."
 
-> "That is a real process and it is the one we are automating. The difference is not that
-> your steps are wrong - it is that right now the only check is you looking at the result.
-> So the questions that follow are about building checks that are better than that look,
-> because that look is what disappears."
+Then take the shipped prompts as the starting point and say so.
 
-Then take the workflows from the templates as a starting point rather than from them, and
-say that is what you are doing. A user with no process needs a proposal, exactly like
-every other question here: it is the one case where the default prompts in
-`templates/runner/factory/prompts/` are the answer rather than a worked example.
+### R1.3 - "Are you willing to let code reach your users without anyone reading it first?"
 
-### R1.3 - "Are you willing to have code merge to main that no human has read?"
+Ask exactly that, then show the dial. **Level 3 is the recommendation - say so.** People
+often say 5; 5 means the factory writes its own work from the mission, which is a different
+decision entirely.
 
-Ask it exactly that way, then show the dial. **Level 3 is the recommendation - say so, and
-treat it as where the conversation starts.** People often say 5; 5 means the factory writes
-its own issues from the mission, which is a separate product decision.
+Expect a pause. That pause is the entire build in one question, and everything in Round 2
+exists to make the answer yes.
 
-Expect a pause. That pause is the whole build in one question, and the holdout, the
-mutation set and the ratchet all exist to make the answer yes.
+Then the follow-up that calibrates everything after it: **"if a bad change did get through,
+what is the worst that happens?"** A side project, an internal tool, or real users and real
+money. That decides how much of the checking has to be code rather than instructions.
 
-Then one follow-up that calibrates everything downstream: **"what is the blast radius of a
-bad merge?"** A personal side project, an internal tool, or something with real users and
-real money. This decides how much of the harness must be structural rather than prompted,
-and how long the protected list is.
-
-If the answer to the first part is a considered no, level 2 is legitimate - but write into
-`FACTORY.md` what would have to be true to go further, so it stays a decision rather than a
-dial nobody touched again. A factory parked at 2 still has a person merging every PR, which
-is the bottleneck the build was for.
+A considered no is fine - level 2 is legitimate. Write into `FACTORY.md` what would have to
+be true to go further, so it stays a decision rather than a dial nobody touched again.
 
 ---
 
 ## Round 2 - what only they can answer
 
-Six. Each produces something no template can guess. Spend the time here, especially on the
-harness ones.
+**Seven questions, and every one is about something that has already happened to them.**
 
-### R2.1 - "Name five things you would reject even if a user asked nicely and the code would be easy."
+That is the rule this round is built on, and it is a correction. An earlier version asked
+people to *design* things: name three properties that hold when features combine, list six
+ways the software could be silently wrong, define what must stay true under argument. Those
+are the right artifacts and they are the wrong questions - they are a design exercise
+handed to someone who came here to answer questions about their own product. The person who
+wrote the skill got lost in his own interview.
 
-*The most valuable list in the build, and the reason a PRD is required.* Start from the
-PRD's **non-goals**, which are usually most of the way there, and read them back. Then push,
-because a PRD's non-goals keep a team focused this quarter, and this list has to hold
-against an agent reading a stranger's feature request at three in the morning.
+**So: ask about their experience, and derive the artifact yourself.** A user should be able
+to answer every question below having never heard of this skill, from memory, about
+software they know. Turning those answers into scenarios, defect sets and rules is your
+job, and you do it silently.
 
-Prompt with categories until there are five or more: new data sources, new providers,
-payments, mobile, social features, public API, integrations, alternate input modes.
+### Assume more. That is the trade, and it is deliberate.
 
-**The distinction to hold on to: a PRD says "not now", `MISSION.md` has to say "not ever".**
-Walk the non-goals one at a time and sort them. "Not now" items belong in the backlog and
-must **not** appear as out-of-scope, or the factory will reject that work when its turn
-comes.
+**When a question is hard to ask simply, answer it yourself and ask them to correct you.**
+You have their PRD and their repo, which is more than enough to draft a decent first
+version of almost everything here. A drafted answer they can reject in one click is worth
+more than a perfect question they abandon.
 
-**Bad answer:** *"anything that doesn't fit."*
+Concretely, and in this order:
 
-### R2.2 - "What must always stay true, even if an issue argues well for changing it?"
+1. **Draft from their material.** Their non-goals are most of the never-do list. Their MVP
+   is most of the main path. Their code names the things that can break.
+2. **Offer it as the recommended option.** Two or three alternatives, then Other.
+3. **Ask only for the correction.** *"Which of these is wrong, and what did I miss?"*
+4. **Where you had to guess, say so in one line** - and put it in `MISSION.md` as an
+   assumption, so it is visible later rather than silently load-bearing.
 
-Hard invariants - a rate limit, an auth requirement, a privacy property, a single-tenant
-assumption. Different from out-of-scope items: those are features you will not add, these
-are properties that cannot be edited. They go in **both** `MISSION.md` and
-`FACTORY_RULES.md`, deliberately, because the file read at reject time has to contain the
-rule.
+**The sacrifice is real and it is accepted.** Assuming means sometimes assuming wrong, and
+a user correcting a wrong draft is a better outcome than the same user staring at a blank
+question and answering *"I don't know, you pick"* - which is the answer the old interview
+actually produced, and it carries no information at all. A wrong guess gets corrected. An
+abandoned question does not.
 
-### R2.3 - "How do you check a change did not break things today, and what tells you the app is actually running?"
+**What you may never assume:** anything in Round 1, and anything that decides what counts
+as passing. Guessing whether they will accept unreviewed merges, or how strict the checks
+have to be, is not a simplification - it is deciding the project on their behalf.
 
-Two halves, one conversation.
+**Never say these words in a question:** holdout, mutation set, invariant, ratchet,
+independence line, structural gate, composition, marker, E2E. Every one names a solution the
+user has no reason to know. If a term has to appear at all it appears *after* the answer,
+in one sentence, explaining what you are doing with what they just said.
 
-The first: whatever they say - even *"I click around for two minutes"* - is the spec for
-the automation. Get the click-around narrated step by step.
+### R2.1 - "Which of these should it never do - not now, not in a year?"
 
-The second is one of the two gates that **must be code**: a health endpoint returning a
-known payload, a port accepting connections, a specific log line. It becomes the
-`APP_STARTED` marker. Without it, a crashed app produces a validator that cheerfully
-reports "not testable" and something downstream counts that as fine.
+Draft the options **from the PRD's non-goals**, which are usually most of the list already,
+and make it multi-select. What they deselect matters as much as what they keep.
 
-**Bad answer to the second half:** *"it starts up."* A process that starts, hangs and
-returns zero is indistinguishable from a healthy one.
+**The distinction to hold on to: a PRD says "not now", the factory needs "not ever".** Walk
+the non-goals and sort them. "Not now" items go in the backlog and must **not** be listed as
+out-of-scope, or the factory will refuse that work when its turn comes.
 
-### R2.4 - "If someone wanted to make the tests pass without actually fixing anything, what is the easiest cheat?"
+Then one open follow-up with Other: *"anything else it should turn down even if it were
+easy?"* Prompt with categories only if they stall - new data sources, payments, mobile,
+social, a public API, integrations.
 
-Ask it in those words - it is a question about their code, not about agents, and people
-answer it well. The answers are the holes: delete a test, weaken an assertion, mock the
-thing under test, catch and swallow, special-case the test input.
+**What it becomes:** the out-of-scope list in `MISSION.md`, which is what lets the factory
+reject a plausible request at three in the morning.
 
-Each answer becomes a rule in `FACTORY_RULES.md` and, where possible, a structural check.
+### R2.2 - "What would make you stop whatever you are doing and fix it right now?"
 
-### R2.5 - the two harness questions, and they are the hard part
+The plain version of "what must always stay true". People answer this instantly because it
+is a feeling they have had: the pager, the thing you do not let slide until Monday.
 
-Do not use the word "holdout" in the question. Ask the plain version, then explain what it
-becomes.
+Draft three from the PRD and let them correct: *"I would guess - user data leaking to
+another account, the rate limit coming off, anyone being able to see someone else's
+records. Which of those is wrong, and what have I missed?"*
 
-**a) "Name three things that must be true when several features are used TOGETHER - the
-kind of thing that works fine in isolation but breaks when combined."**
+**What it becomes:** the properties in `MISSION.md` and `FACTORY_RULES.md` that no request
+is allowed to argue away. Different from R2.1: those are features you will not add, these
+are things that cannot be changed by anything you *do* add.
 
-Push for **composition**, because that is where the real failures are. The dominant failure
-mode in unattended coding is not cheating, it is **feature isolation**: components that are
-individually correct and never work together. Unit tests test features in isolation by
-definition, so what they measure is precisely the thing that is not broken.
+### R2.3 - "After you make a change, what do you actually do to check you did not break anything?"
 
-Good answers sound like sequences, not properties: *"create one, restart the service, and
-it still resolves"*; *"do it twice with other work in between and the answer is the same"*;
-*"what the operator reads matches what actually happened."*
+Whatever they say is the specification, including *"I click around for a couple of minutes"*
+- **especially** that. Get the clicking narrated, step by step, because that is the check
+that has to be automated.
 
-**Recommend three, then ask what is wrong with them.** Draft them from the PRD's own
-capability list by pairing capabilities that have to survive each other: *"from §6 I would
-propose - (1) shorten, restart the service, resolve: persistence and code generation
-agreeing across a process boundary; (2) shorten the same URL twice with other work in
-between: idempotence under interleaving; (3) a rejected URL never becomes a redirect: the
-invariant probed from several directions. Which of those is wrong, and what would you
-add?"* Almost nobody produces three of these cold. Almost everybody can correct three.
+**Bad answer:** *"I run the tests."* Ask what they do after the tests pass, before they
+believe it.
 
-**Bad answer:** a restatement of a unit test. If a single function's test would catch it, it
-is not one of these.
+### R2.3b - "If you were not looking at the screen, how would you know it was running properly - not just started?"
 
-Two follow-ups worth thirty seconds: *"would you have written these before seeing the
-implementation?"* (one written after is a description of the implementation) and *"what
-input would you use?"* (it must appear nowhere else in the repo - a value the builder can
-grep for is one it can special-case).
+One of the two things that must be code. A URL that answers, a page that renders, a line in
+a log. A process that starts, hangs and returns zero looks exactly like a healthy one.
 
-Then explain what you are doing with it: these become scenarios the building agent is
-blocked from reading, which is the only honest reason to merge code nobody reviewed.
+**Bad answer:** *"it starts up."*
 
-**b) "If I broke this software silently, what would you be most afraid nobody would
-notice?"**
+### R2.4 - "What is the laziest way to make the tests pass without actually fixing anything?"
 
-**The mutation set, and nothing else in the interview produces it.** It is the only question
-here that measures the *harness* rather than the code, and until a defect has been injected
-and caught there is no evidence any check can fail at all.
+Ask it in those words. It is a question about their code, not about agents, and people
+answer it well and enjoy it: delete the test, weaken the check, mock the thing being
+tested, catch the error and carry on, special-case the test input.
 
-Take the fears literally; each becomes one textual change to real source. Six or seven is a
-real set. Prompt with shapes if they stall:
+**What it becomes:** rules in `FACTORY_RULES.md` and, where it can be, a check in code.
 
-- an invariant quietly inverted - a comparison flipped, a guard removed
-- a counter that exists and stops moving
-- an output made constant - always the same answer, right shape, wrong number
-- an error path that silently succeeds instead of raising
-- a persistence write dropped, so everything works until a restart
+### R2.5a - "Tell me about a bug that got past your tests and reached you anyway. What happened?"
 
-**Recommend a starting six, drawn from their own code or PRD**, and ask which are wrong:
-one invariant inverted, one counter frozen, one output made constant, one error path that
-returns instead of raising, one persistence write dropped, one off-by-one at a boundary -
-each named against a real function or capability of theirs, not in the abstract. Editing a
-list of six is a two-minute job; producing one from nothing is where people stall and say
-"I'll come back to it", and then the gate has never been shown to fail.
+**This replaces the hardest question in the old interview**, which asked people to name
+three properties that hold only when features are used together. Almost nobody can do that
+cold; the file admitted as much and then asked anyway.
 
-Then say the thing that makes it stick: **every defect that escapes is a class of bug that
-can currently merge with nobody reading the diff.** That converts an abstract exercise into
-a list of specific holes they now want closed.
+Everybody has this story, and the story is the same artifact. A bug that survives a test
+suite is nearly always one that needs two things to be true at once - it saved but did not
+reload, it worked once but not twice, the second user saw the first user's data. That is
+exactly the material needed, and it arrives as a memory instead of a design exercise.
 
-### R2.5c - "Which parts of this can a machine never check?"
+Ask for two or three. Then one follow-up: **"what would have caught it?"**
 
-Ask it right after the two above, while the user is already thinking about what a check
-can and cannot see. **The factory's scope is strictly smaller than the product's**, and the
-gap is always the same shape: feel, presentation, readability. *"Combat feels good."* *"The
-escalation is visibly and audibly different."* *"A first-time player understands it."*
+**What it becomes:** the scenarios kept where the building agent cannot read them, which
+is the only honest reason to merge code nobody reviewed. Say that in one sentence *after*
+they answer, not before.
 
-None of those are machine-validatable and none ever will be. Name them, write them into
-`MISSION.md` and `FACTORY_RULES.md` as **permanently human**, and say plainly which layer
-the factory owns instead - usually the simulation, the domain, the rules.
+**If they genuinely have none** - a greenfield project with no history - draft from the PRD
+by pairing capabilities that have to survive each other, and ask which is wrong: *"make one,
+restart it, is it still there"*, *"do it twice with something else in between, same answer"*,
+*"something you rejected never quietly becomes accepted."*
 
-That is not a downgrade. It is usually where most of the risk lives, and it is the half
-that can actually be defended. But a user who thinks the factory owns the whole MVP will
-read a green gate as "the product is good", and it never meant that.
+### R2.5b - "If I broke one thing quietly and nobody noticed, what would hurt the most?"
 
-### R2.5d - "What is the factory allowed to decide on its own and show you, and what must it stop and ask about first?"
+The best question in the interview. Keep the words.
 
-**This question sets how much work the factory refuses**, and the default answer is
-already written: it decides **product** values (a price, a rate, a default, a name),
-records what it chose, and the merge is held for you. It never decides **judgement**
-values - a lock, a floor, a tolerance, a sample size, a mutation - because choosing those
-is tuning the judge.
+**But stop asking for six.** The old version wanted six or seven and people stalled, said
+they would come back to it, and never did. Ask for **the one that scares them most**, then
+draft five more from it and their code and ask which are wrong. Editing a list is easy;
+producing one from nothing is where interviews die.
 
-So do not ask this open. **Propose that split, and ask only for the additions to the stop
-list**: *"beyond changing the checks themselves, what would you want it to stop and ask
-about rather than build and show you?"*
+Shapes to draft from, named against their real features rather than in the abstract: a
+check quietly reversed, a counter that stops moving, an answer that is always the same
+number, an error that returns instead of raising, a save that stops happening so everything
+works until a restart, an off-by-one at a boundary.
 
-What you are collecting is `FACTORY_RULES.md` §7.3, the **irreversible list** - the
-changes a revert does not undo. Schema migrations, anything touching money, auth and
-secrets, a side effect that leaves the building. Take their list, and push back on length
-in one direction only: **everything on it costs throughput, and everything missing from it
-costs more than throughput.** A short list they believe in beats a long list they wrote to
-feel safe.
+**What it becomes:** the deliberate defects the checks are measured against. The line worth
+saying afterwards: *every one of these that gets through is a kind of bug that can currently
+ship with nobody reading the diff.*
 
-The failure this prevents is specific and it is the common one. An earlier version told
-the plan node to stop for "an answer to any MISSION open question", so a PRD that was
-honest about what it had not settled blocked every issue downstream of it - four issues,
-four escalations, zero PRs, and the same question asked four times. **The more honest the
-PRD, the less the factory could do.** Say that out loud when you ask this, because a user's
-instinct is to make the stop list long.
+### R2.7 - "Once it is live, what would you run or click to prove it is really working?"
 
-### R2.6 - "What is the one thing that, if broken, means do not merge no matter what else passed? And what would you rather ship than block on?"
+And: **what would you see if it worked?** Both halves, because a deploy step with no check
+is a step that cannot fail, and a step that cannot fail is a comment.
 
-**Recommend the boring default and let them argue with it:** block on the app starting,
-the E2E path passing, and no protected file being touched - and ship anything else. That
-is the right answer for most projects and it is a much easier thing to disagree with than
-an empty question.
+Push for something a user would notice - a request served, a page rendered, a row written.
 
-Both halves together, because they are the same dial from opposite ends. The first becomes
-`FACTORY_REQUIRED_MARKERS` - a small, boring list: the app starts, the E2E path passes, no
-protected file was touched. The second is the severity policy, and without it every lint
-nit blocks the loop and the user turns the factory off out of irritation.
+---
 
-### R2.7 - "When something merges, what command would prove the build actually works, and what would it print?"
+**Three questions that used to be here now ride in Round 3**, as defaults to amend rather
+than questions to answer. They were the most abstract in the interview and all three have a
+right answer that is already written down:
 
-`deploy.sh` **refuses to move the pointer** without both. A deploy with no health check is a
-deploy that cannot fail, and a step that cannot fail is a comment. These two answers are
-`FACTORY_HEALTH_CMD` and `FACTORY_HEALTH_MARKERS`.
-
-Push for an observable a user would notice - a request served, a page rendered, a row
-written.
+| was | now |
+|---|---|
+| *"Which parts of this can a machine never check?"* | drafted from the PRD - feel, look, readability - and confirmed in the Round 3 call |
+| *"What may the factory decide on its own, and what must it stop and ask about?"* | the split is fixed policy, so only the additions are asked, in Round 3 |
+| *"What must never merge, and what would you rather ship than block on?"* | the boring default is recommended: it must start, the main path must pass, no protected file touched |
 
 *(There is no push-or-poll question. The answer is always poll: a push trigger that breaks
 fails silently and looks exactly like a factory with nothing to do, and GitHub does not fire
@@ -483,6 +444,9 @@ Play the whole thing back as a single spec before writing any file:
 soft failure - it is a blocked first lap. Name them back explicitly:
 
 | answer | becomes | what happens without it |
+| **What must never merge** | it has to start, the main path has to pass, no protected file was touched - and everything else ships | the boring answer is the right one for almost every project, and it is far easier to argue with than an empty question. This used to be asked open and produced either a list of one or a list of forty |
+| **What only a person can judge** | drafted from their PRD: feel, look, wording, whether a newcomer understands it | the factory's scope is smaller than the product's and always in the same way. Derive it, show it, let them add. Written into `MISSION.md` as permanently human, so a green gate is never read as "the product is good" |
+| **What it should ask about before doing** | changes a revert does not undo: schema migrations, money, auth and secrets, anything that sends something outside the building | the split itself is fixed policy - it decides ordinary product values and shows you, it never decides what counts as passing - so only the additions are worth asking for. Push back on length in one direction only: everything on this list costs throughput, everything missing from it costs more than throughput |
 |---|---|---|
 | files that must never be committed | `FACTORY_SECRET_FILES` + `.gitignore` | pre-flight refuses; no lap ever starts |
 | the command that proves the app runs | `FACTORY_VALIDATE_CMD` | the gate has nothing to run |

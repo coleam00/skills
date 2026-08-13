@@ -515,7 +515,33 @@ def audit_user_facing_text(run: Path, repo: Path | None):
         heads = re.findall(r"^###\s+(?:\[[A-Z]+\]\s*)?(R\d+\.\d+[a-z]?)", itext, re.M)
         checked(f"interview: {len(heads)} questions, none marked [PROSE]")
 
-    # ---- 3. OUTPUT DISCIPLINE must be stated, not assumed -------------------
+    # ---- 3. NO JARGON IN A QUESTION -----------------------------------------
+    # The question the USER READS may not name a solution they have no reason to know.
+    # "What must always stay true, even if an issue argues well for changing it?" is
+    # invariants in disguise; "name three things that must be true when features are used
+    # TOGETHER" is a holdout, and the file itself admitted almost nobody could answer it
+    # cold. The artifacts are right. Asking the user to design them is not their job.
+    #
+    # Checked against the question HEADINGS only - the text a user is read. The body of
+    # each section is written for the agent and names these things freely, which is where
+    # they belong.
+    JARGON = ("holdout", "invariant", "mutation set", "mutation testing", "ratchet",
+              "independence line", "structural gate", "composition", "idempoten",
+              "e2e", "required marker")
+    if interview.exists():
+        for i, line in enumerate(itext.splitlines(), 1):
+            if not line.startswith("### R"):
+                continue
+            low = line.lower()
+            for term in JARGON:
+                if term in low:
+                    finding(f"interview.md:{i}: the question a USER READS contains "
+                            f"{term!r}. Ask about something that has happened to them and "
+                            f"derive the artifact yourself.\n      {line.strip()[:100]}")
+        checked(f"questions: {len(heads)} headings, none naming a solution the user has "
+                f"no reason to know")
+
+    # ---- 4. OUTPUT DISCIPLINE must be stated, not assumed -------------------
     # "Incredibly frustrating and hard to process. Overwhelming to say the least." An agent
     # given no budget explains everything it did, and a procedure this long produces a wall
     # per phase. The rule has to be IN the skill, because the model has no other way to know.

@@ -402,6 +402,12 @@ an open question, derive them from **their PRD and their repo** and cite the sou
 draft from their own material is their answer played back and they will overwrite it
 happily; an invented one anchors them onto your guess.
 
+**Every Round 2 question asks about something that has ALREADY HAPPENED to them** - a
+bug that escaped, a thing they would drop everything to fix, what they do after a change
+to convince themselves. Never ask a user to design an artifact. They answer from memory
+about their own software; turning that into scenarios, defect sets and rules is your job,
+done silently. `interview.md` carries the exact words and what each becomes.
+
 **Two rules apply to every question:**
 
 1. **Always carry a recommendation.** Exactly one option marked `(Recommended)`, first,
@@ -416,19 +422,16 @@ happily; an invented one anchors them onto your guess.
 
 Round 1 - three questions decide the project, so do not let any of them slide:
 
-1. **"Describe the single most valuable thing a user does with this app, as a
-   sequence of actions ending in something you can see on a screen."** That sequence
-   is the E2E happy path. If the user cannot describe it, they cannot automate
-   checking it, and the factory cannot be trusted.
-2. **"Walk me through how you build a feature with AI today, step by step."** This is
-   what gets encoded. Their planning step, their implementation step, their review
-   step, the skills and MCP servers and rules files each one uses. The factory's
-   workflows should be recognisably their process with the approvals taken out, not a
-   generic pipeline they have to learn.
-3. **"What level of autonomy do you actually want?"** Use the dial below. **Recommend
-   level 3, and build for it unless they say otherwise.** People often say 5; 5 means
-   the factory writes its own issues from the mission, which is a different product
-   decision and not the one they are asking for.
+1. **"Walk me through the single most useful thing someone does with this, from the
+   first click to the thing they end up looking at."** That sequence becomes the main
+   path checked on every change. If they cannot describe it, nothing can check it.
+2. **"How do you build a feature with AI today?"** One open question, not a
+   questionnaire - take what they give you and read `CLAUDE.md`, `AGENTS.md`,
+   `.claude/` and `.cursor/` for the rest. The workflows should be recognisably their
+   process with the approvals taken out.
+3. **"Are you willing to let code reach your users without anyone reading it first?"**
+   Then the dial below. **Recommend level 3.** People often say 5; 5 means the factory
+   writes its own work from the mission, which is a different decision.
 
 ### The autonomy dial
 
@@ -445,9 +448,8 @@ Round 1 - three questions decide the project, so do not let any of them slide:
 
 It is the first level where code merges without a human reading it, and it is the whole
 point: a factory that stops at 2 is a code generator with a queue, and the person is still
-the bottleneck they were trying to remove. Everything difficult in this build - the
-holdout, the mutation set, the ratchet, the two gates that must be code - exists to earn
-level 3, so building for anything less means doing the hard part and then not using it.
+the bottleneck they were trying to remove. Everything difficult in this build exists to
+earn level 3, so building for anything less means doing the hard part and not using it.
 
 Levels 0 to 2 are **stages on the way**, not destinations. Ship them in order, prove a lap
 at each, and keep going to 3. The dial is enforced in `orchestrator.sh` and
