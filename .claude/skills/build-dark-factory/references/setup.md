@@ -6,7 +6,7 @@ you can have five perfect components and a factory that has never completed a la
 line endings got rewritten on checkout.
 
 Read this in **Phase 6**, when the trigger goes on. Skim the prerequisites in Phase 0b so
-you refuse early rather than three hours in.
+you refuse at the start rather than halfway through.
 
 ---
 

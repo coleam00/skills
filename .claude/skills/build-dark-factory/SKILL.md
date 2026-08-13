@@ -33,6 +33,42 @@ phase below ends with files committed and something demonstrably working.
 
 ---
 
+## Output discipline - read this before you write a single word to the user
+
+This document is long because it has to be complete. **What you SAY is not.** A user
+running this reported the experience as *"incredibly frustrating and hard to process,
+overwhelming to say the least"* - and that was the skill working correctly, explaining
+itself at every step. Reasoning that belongs in a file is noise in a chat window.
+
+**Hard budgets. These are not style preferences.**
+
+| Moment | Budget |
+|---|---|
+| Between one question and the next | **Nothing.** Ask. Do not preface, do not recap the last answer. |
+| Finishing a phase | **Two lines.** What now exists, and the next question. |
+| Explaining a concept | **Only when asked**, and then the short version first. |
+| Reporting a file you wrote | **One line.** Its path and what decides its content. |
+| A command's output | Never paste it. Say the verdict and the number. |
+
+**Never do these:**
+
+- Announce a plan for a phase before doing it. Do it, then say what exists.
+- Restate the user's answer back to them as a paragraph. A picker already showed it.
+- Explain WHY the skill works this way. That reasoning is in `references/`, for you, not
+  for them. If they want it they will ask.
+- Print a table of everything you are about to build.
+- Summarise at the end of a phase what you said at the start of it.
+- Paste a file you just wrote. They can open it.
+
+**The one thing worth spending words on** is a question that carries a real decision, and
+those go through the question tool, where the words are in the options rather than in a
+paragraph above them.
+
+A useful test before any message: *would this still be true if I deleted it?* If the files
+on disk carry the fact, delete it.
+
+---
+
 ## What this is, and what it is not
 
 **A dark factory is not a different way of coding with AI. It is the way you already
@@ -97,7 +133,7 @@ That distinction is also what decides which parts of this ship as a template:
 The dispatcher, the runner, the gate, the guard, the merge and the state machine are the
 same in every factory, so they are in `templates/runner/` with their scars intact. What
 "working" means for this app is the one thing nobody can write in advance, so component 5
-is yours - and it is where the week should go.
+is yours - and it is where the real work of this build sits.
 
 ---
 
@@ -307,7 +343,7 @@ interview.
 
 #### The fork, once the interview has given you a journey
 
-Three known answers, so use `AskUserQuestion` (or the equivalent) rather than a paragraph,
+Three known answers, so this is a question-tool call like every other,
 and **recommend the first**:
 
 1. **Build the thin skeleton now, then the factory on it** *(recommended)* - name the
@@ -349,41 +385,34 @@ first two minutes.
 Reflect each answer back as a concrete artifact ("so the merge gate is: X") before moving
 on.
 
-**Use the agent's own question tool where one exists** - `AskUserQuestion` in Claude Code,
-and whatever the equivalent is elsewhere. It renders real options with a recommendation
-instead of asking someone to read a paragraph and type a reply, and a user picking from a
-list answers questions they would have skipped. Fall back to prose where there is no such
-tool; nothing below depends on it.
+**EVERY QUESTION GOES THROUGH THE QUESTION TOOL.** `AskUserQuestion` in Claude Code, or
+the equivalent elsewhere. Every one, including the open-ended ones. No exceptions, and no
+prose fallback.
 
-**But only for decisions among options you already know.** The split is not stylistic:
+This used to be split - pickers for known options, prose for the open questions - on the
+argument that offering options for *"describe the most valuable thing a user does"*
+replaces the answer with a menu of your guesses. That argument is answered by the tool
+itself: **it always carries an "Other" free-text escape.** The user who wants to answer in
+their own words still can, in one keystroke. The user who would have skimmed a paragraph
+and said *"you pick"* now corrects the closest of three concrete candidates, which is the
+answer you needed and would not have got.
 
-| Use the question tool | Ask in prose |
-|---|---|
-| the autonomy dial (R1.3) | the user journey (R1.1) |
-| the greenfield fork (Phase 0c) | how they build a feature with AI today (R1.2) |
-| **all of Round 3** - one call, multi-select, "which of these do you want to change?" | the never-ever list (R2.1), the invariants (R2.2) |
-| the severity dial (R2.6), when the options are real | the harness questions (R2.3, R2.4, R2.5) |
+What survives from the old argument is a constraint on the OPTIONS, not on the tool: for
+an open question, derive them from **their PRD and their repo** and cite the source. A
+draft from their own material is their answer played back and they will overwrite it
+happily; an invented one anchors them onto your guess.
 
-The prose column is not a limitation of the tool, it is the point of those questions.
-Offering options for "describe the most valuable thing a user does" replaces the answer
-you need with a menu of guesses you wrote - and that answer becomes `e2e.py`, the only
-check with real authority. A picker there is worse than no question.
+**Two rules apply to every question:**
 
-**Two rules apply to every question, in both columns:**
-
-1. **Always carry a recommendation - never hand someone a blank page.** In a picker, mark
-   exactly one option `(Recommended)` and put it first. In prose, draft the answer **from
-   their PRD and their repo**, cite where you got it, and ask them to correct it: *"from §6
-   the journey looks like X - is that the most valuable one, and what am I missing?"* A
-   question with a draft attached is a two-second correction; the same question blank is
-   homework, and homework is where interviews get abandoned. Where a recommendation would
-   be dishonest, say *that* rather than inventing confidence.
+1. **Always carry a recommendation.** Exactly one option marked `(Recommended)`, first,
+   with the reason in its one-line description. Never a blank page. Where a recommendation
+   would be dishonest - a genuine coin-flip - say *that* in the question rather than
+   inventing confidence.
 2. **Offer to explain the hard parts before they answer.** Holdout, mutation set, ratchet,
-   independence line, structural gate - these are obvious only after you have built one of
+   independence line, structural gate are obvious only to someone who has built one of
    these, and a user who does not want to admit they have not heard of a holdout will
-   guess. In a picker, add an *"Explain this first"* option. In prose, lead with one
-   sentence of plain English. `interview.md` has a one-breath explanation for each term;
-   use those words, and do not lecture.
+   guess. Add an *"Explain this first"* option. `interview.md` has a one-breath explanation
+   for each term - use those words, and do not lecture.
 
 Round 1 - three questions decide the project, so do not let any of them slide:
 
@@ -503,7 +532,8 @@ about the template's sample product is worse than no gate at all.
 The interview produces all three: **R1.1** the journey, **R2.5a** the composed
 scenarios the builder cannot read, **R2.5b** the defects that must be caught. What
 a user would notice is the part nobody can write for you, it is the answer to R1.1, and
-it is where the week goes. The scaffold buys you the day; it does not buy you the week.
+it is where the real work sits. The scaffold buys you the plumbing; it does not
+buy you the assertions.
 
 The short version, which is not a substitute for reading it:
 
@@ -565,7 +595,7 @@ gate. Port those properties; do not port the bash.
 Read `references/deployment.md`. It is short and it contains the single trap that
 silently kills more factories than anything else: **GitHub does not trigger workflows
 on commits made with the default `GITHUB_TOKEN`.** The agent commits, the deploy never
-fires, nothing errors, and it takes a week to notice.
+fires, nothing errors, and nothing tells you.
 
 If the loop does not end at real users, the user has built a PR generator.
 
@@ -656,7 +686,14 @@ the evidence that earns it, not a ladder to stop partway up.
 
 ---
 
-## Things to tell the user before they start
+## Operating facts - NOT a speech to deliver
+
+**Do not recite this section.** It reads like an opening briefing and it was being
+delivered as one, which is six dense paragraphs before the user has done anything. These
+are facts *you* need in order to build correctly, and each one belongs at the single moment
+it becomes actionable - the token bullet when the trigger goes on, the `git check-ignore`
+bullet when the first committing workflow is written, one line each. If the user asks what
+they should watch out for, then answer from here, shortest first.
 
 - **The PRD is now a live document, not a kickoff artifact.** In normal development a
   PRD goes stale and a human quietly compensates. Here nobody compensates: the factory
@@ -744,7 +781,7 @@ the evidence that earns it, not a ladder to stop partway up.
   the factory rather than gaps in your setup, and a correctly configured repo running
   broken machinery passes every check the doctor has.
 
-> **Why these two exist.** For weeks the same four failure shapes kept reappearing in this
+> **Why these two exist.** The same four failure shapes kept reappearing in this
 > runner, each found by hand and fixed as a one-off. The reason is the one this skill
 > spends five phases making about your code: there was no harness. ~4,200 lines of runner
 > shipped with nothing that ever *executed* it, so every fix was a sentence in a document

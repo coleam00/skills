@@ -452,6 +452,82 @@ def audit_skill_text(run: Path, repo: Path | None):
             "estimates; no positional-substitution hazards")
 
 # =============================================================================
+def audit_user_facing_text(run: Path, repo: Path | None):
+    """Three standing instructions that live only as prose, and therefore rot.
+
+    All three came from Cole using the skill and finding it unusable in a specific way.
+    None of them can be enforced by a behaviour test, because they are properties of what
+    the agent SAYS. So they are checked here, against the shipped text, every run.
+    """
+    if repo:
+        return
+    files = [SKILL / "SKILL.md"] + sorted((SKILL / "references").glob("*.md"))
+
+    # ---- 1. NEVER estimate how long anything takes -------------------------
+    # "This is the block where the week goes" reached a live interview. The rule is not
+    # "no prices" -- it is that the skill never tells someone how much of their life this
+    # will cost, in any unit, because it does not know and the guess is always wrong in the
+    # direction that makes people not start.
+    DURATION = re.compile(
+        r"(?<![-\w])("
+        r"(?:a|an|one|two|three|several|couple of|few)\s+"
+        r"(?:week|weeks|day|days|hour|hours|minute|minutes|month|months|afternoon|evening)"
+        r"|the\s+week|the\s+day\s+(?:goes|it takes)"
+        r"|(?:takes?|spend|spent|budget|allow)\s+(?:about|around|roughly|approximately|~)?\s*"
+        r"\d+\s*(?:week|day|hour|minute|month)s?"
+        r"|\d+\s*(?:weeks|days|hours|minutes|months)\s+(?:of work|to build|to set up|to finish)"
+        r"|overnight\s+(?:build|job|work)"
+        r"|for\s+weeks|for\s+months"
+        r")(?![-\w])", re.I)
+    # Legitimate uses: poll intervals, timeouts, cron cadence, lock ages, lookback windows.
+    TECHNICAL = re.compile(
+        r"(poll|interval|cron|schedule|timeout|stale|grace|--since|lookback|budget-usd|"
+        r"every \d+ min|e2e_timeout|MINUTES|_s|watchdog|sleep|retry|cooldown)", re.I)
+    for f in files:
+        for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            if TECHNICAL.search(line):
+                continue
+            m = DURATION.search(line)
+            if m:
+                finding(f"{f.name}:{i}: estimates how long something takes "
+                        f"({m.group(0)!r}). The skill never says how much of someone's "
+                        f"life this costs -- it does not know, and the guess is always "
+                        f"wrong in the direction that stops people starting.\n"
+                        f"      {line.strip()[:110]}")
+
+    # ---- 2. EVERY question goes through the question tool -------------------
+    # A hard requirement, not a preference. The old text split questions into [PICKER] and
+    # [PROSE] and argued the split was load-bearing. In use it was not: the prose questions
+    # arrive as a wall of text asking for homework, and homework is where interviews get
+    # abandoned. AskUserQuestion always carries an "Other" free-text escape, so an
+    # open-ended question loses nothing by being asked through it -- and gains the
+    # recommendation it is required to carry anyway.
+    interview = SKILL / "references" / "interview.md"
+    if interview.exists():
+        itext = interview.read_text(encoding="utf-8")
+        stray = re.findall(r"\[PROSE\]", itext)
+        if stray:
+            finding(f"interview.md still marks {len(stray)} question(s) [PROSE]. Every "
+                    f"question goes through the question tool -- no exceptions.")
+        if re.search(r"Ask in prose|prose column|fall back to prose", itext, re.I):
+            finding("interview.md still describes a prose fallback for questions. The "
+                    "requirement is every question, through the tool, always.")
+        heads = re.findall(r"^###\s+(?:\[[A-Z]+\]\s*)?(R\d+\.\d+[a-z]?)", itext, re.M)
+        checked(f"interview: {len(heads)} questions, none marked [PROSE]")
+
+    # ---- 3. OUTPUT DISCIPLINE must be stated, not assumed -------------------
+    # "Incredibly frustrating and hard to process. Overwhelming to say the least." An agent
+    # given no budget explains everything it did, and a procedure this long produces a wall
+    # per phase. The rule has to be IN the skill, because the model has no other way to know.
+    skill_text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+    if not re.search(r"output discipline|keep it short|say less", skill_text, re.I):
+        finding("SKILL.md states no output-discipline rule. Without one the agent narrates "
+                "every phase and the user is handed a wall of text per step.")
+    checked("user-facing text: no duration estimates, every question uses the question "
+            "tool, output discipline is stated")
+
+
+# =============================================================================
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -477,6 +553,7 @@ def main() -> int:
         fn(run)
     audit_prompt_citations(run, repo)
     audit_skill_text(run, repo)
+    audit_user_facing_text(run, repo)
 
     if not args.quiet:
         for c in CHECKED:

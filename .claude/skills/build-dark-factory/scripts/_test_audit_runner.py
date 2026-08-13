@@ -22,6 +22,21 @@ SK = pathlib.Path(r"C:\Users\colem\OpenSource\skills\.claude\skills\build-dark-f
 
 CASES = [
     # (label, relative path under the COPY, find, replace, substring the audit must print)
+
+    # --- the three user-facing rules. Each came from Cole using the skill and finding it
+    # --- unusable in a specific way, and none can be caught by a behaviour test, because
+    # --- they are properties of what the agent SAYS.
+    ("a duration estimate in SKILL.md", "SKILL.md",
+     "## Output discipline", "This takes about three days.\n\n## Output discipline",
+     "estimates how long something takes"),
+    ("a question marked [PROSE] again", "references/interview.md",
+     "### R1.1 -", "### [PROSE] R1.1 -",
+     "[PROSE]"),
+    ("the output-discipline rule deleted", "SKILL.md",
+     "## Output discipline - read this before you write a single word to the user",
+     "## Some other heading entirely",
+     "no output-discipline rule"),
+
     ("config knob not exported", "templates/runner/factory/config.sh",
      "       FACTORY_SIZE_CAP \\", "",
      "FACTORY_SIZE_CAP"),

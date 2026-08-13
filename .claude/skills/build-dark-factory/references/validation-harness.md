@@ -150,7 +150,7 @@ is limited but because nothing can check the work.
 
 On a **greenfield** build, say this before any code exists. It is nearly free then and it
 is a rewrite afterwards. On a brownfield one, it is the first thing to find out, because
-the answer decides whether component 5 is a week or a refactor.
+the answer decides whether component 5 is additive or a refactor.
 
 **`templates/harness/ci.py` implements 1, 2, 4, 6 and 7. Rung 5 is not scaffolded**, and
 saying so matters: a doc that lists a rung the scaffold does not ship reads as "you have

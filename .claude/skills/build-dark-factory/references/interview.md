@@ -22,52 +22,58 @@ wrong by someone who has not built one of these before.
 > someone retype a document they already wrote is the most common way a well-designed
 > interview fails.
 
-**Use the agent's own question tool where one exists** - `AskUserQuestion` in Claude Code,
-or the equivalent. Each question below is marked **[PICKER]** or **[PROSE]**, and the mark
-is not a style note:
+**EVERY QUESTION GOES THROUGH THE QUESTION TOOL.** `AskUserQuestion` in Claude Code, or
+the equivalent elsewhere. Not most questions, not the ones with obvious options - every
+one, including the open-ended ones. This is a hard requirement and it has no exceptions.
 
-- **[PICKER]** - a decision among options that are already known. The tool renders them
-  with a recommendation, and someone picking from a list answers things they would have
-  skipped in a wall of text. Every default in Round 3 is one call, multi-select.
-- **[PROSE]** - the answer has to be in the user's own words, and offering options
-  replaces it with a menu of your guesses. R1.1 becomes `e2e.py`, the only check with real
-  authority; a picker there is worse than no question at all.
+The earlier version of this file split questions into pickers and prose and argued the
+split was load-bearing: that offering options for *"describe the most valuable thing a user
+does"* replaces the answer you need with a menu of your guesses. That argument was wrong,
+and it was wrong for a mechanical reason:
 
-Where there is no such tool, ask in prose and mark the [PICKER] ones by listing the
-options with your recommendation first. Nothing here depends on the tool existing.
+> **The question tool always carries an "Other" escape with free text.** So an open-ended
+> question loses nothing by being asked through it. The user who wants to answer in their
+> own words still can, in one keystroke. The user who would have skimmed a paragraph and
+> replied *"you pick"* now sees three concrete candidates and corrects the one closest to
+> right - which is the answer you wanted and would not have got.
 
-**But degrade Round 3 differently, because a table is not a fallback for a widget.** With
-a picker, ten defaults is ten seconds and no reading. Rendered as prose it is a wall, and
-a real run produced exactly the failure the picker exists to prevent: the user skimmed it
-and said *"I don't have opinions on any of that, you pick"* - which loses the two or three
-she did have a view on. So with no picker available:
+What was true in that old argument survives as a constraint on the OPTIONS, not on the
+tool: for an open question, the options must be **drafted from their own PRD and their own
+repo, and cited**, never invented. A draft from their material is their answer played back
+and they will happily overwrite it. An invented one anchors them onto your guess. If you
+have nothing to derive options from, say so in the question text and lean on Other.
 
-> **Ask about three. State the rest as decisions you have made.** Pick the three most
-> likely to matter to *this* user - usually the protected paths, the notification channel,
-> and the stop button - and put them as three short questions. List the other seven as a
-> short paragraph of things you have set, with an invitation to change any of them. A
-> decision they can object to gets read; a table they must audit does not.
+**Shape of a call:**
+
+- Two to four options, one marked `(Recommended)` and placed first.
+- Each `description` is one line: what it means, or what happens if they pick it.
+- The `header` is 12 characters or fewer.
+- Batch related questions into a single call - the tool takes up to four - but never batch
+  the three Round 1 questions, which are asked one at a time and in order.
+- Never ask a question the PRD already answers. Play that back as a proposal instead.
+
+**A question that wants a LIST** - R2.1 asks for five things, R2.2 for a set of invariants -
+is a **multi-select** whose options you drafted from their PRD's non-goals, plus Other for
+what you missed. Four drafted candidates they can tick is a far better prompt for the fifth
+than a blank line, and the ones they *deselect* are as informative as the ones they keep.
+Ask once more with what they added if the first pass produced fewer than you expected.
 
 ## Two rules that apply to every question below
 
-### 1. Always carry a recommendation. Every question, including the prose ones.
+### 1. Always carry a recommendation. Every question, no exceptions.
 
 **Never hand someone a blank page.** A question with no proposed answer is homework; the
 same question with a draft attached is a two-second correction. This is the single biggest
 difference between an interview that finishes and one that gets abandoned in the middle.
 
-- **[PICKER]** - mark exactly one option `(Recommended)` and put it first. Say why in its
-  description, in one line.
-- **[PROSE]** - draft the answer **from their own PRD and their own repo**, show it, and
-  ask them to correct it. *"From §6 of the PRD, the journey looks like: open the app →
-  shorten a URL → follow the short link → land on the original. Is that the most valuable
-  one, and what am I missing?"*
+Mark exactly one option `(Recommended)` and put it first, with the reason in its
+description, in one line.
 
-The prose rule has one hard condition: **the draft must be visibly derived from their
-material, not invented.** Cite where it came from. An invented draft anchors them onto
-your guess, which is the exact failure that makes a picker wrong for R1.1 - the difference
-is that a draft from their PRD is their own answer played back, and they will happily
-overwrite it. If you have nothing to derive a draft from, say so and ask open.
+For an open-ended question the options ARE the draft. Derive them from their PRD and their
+repo and cite the source in the question text, e.g. *"From §6 of the PRD the journey looks
+like: open the app -> shorten a URL -> follow the short link -> land on the original."*
+Then offer that as the recommended option, one or two plausible alternatives, and let Other
+carry anything you did not think of.
 
 Where a recommendation would be dishonest - a genuine coin-flip, or something only they
 can know - say **that** instead of inventing confidence: *"I have no basis for a
@@ -79,10 +85,9 @@ Several of these questions use vocabulary that is obvious only after you have bu
 these. A user who does not want to admit they have not heard of a holdout will guess, and
 a guessed answer becomes an unenforceable rule.
 
-So **offer the explanation rather than waiting to be asked**. In a picker, add an explicit
-option - *"Explain this first"* - as a real choice; it costs one line and it is the option
-that gets picked more than you would expect. In prose, put one sentence of plain English
-in front of the question and offer to go deeper.
+So **offer the explanation rather than waiting to be asked**: add an explicit
+*"Explain this first"* option as a real choice. It costs one line and it gets picked more
+than you would expect.
 
 The terms that need it, and how to say each in one breath:
 
@@ -143,7 +148,7 @@ after three questions, these are the three you needed.
 > failure: the agent builds the MVP by hand so the harness has something to test, and the
 > factory inherits the leftovers.
 
-### [PROSE] R1.1 - "Describe the single most valuable thing a user does with this app, as a sequence of actions ending in something you can see."
+### R1.1 - "Describe the single most valuable thing a user does with this app, as a sequence of actions ending in something you can see."
 
 *The* question. The answer becomes the E2E happy path, which is the only check with real
 authority, and it is what `harness/e2e.py` gets rewritten into.
@@ -155,7 +160,7 @@ Force it concrete. Not "users can search." Instead: *open the app → sign in as
 **Bad answer:** any description that never mentions something observable. If it cannot be
 observed it cannot be asserted, and the agent will claim it works.
 
-### [PROSE] R1.2 - "Walk me through how you build a feature with AI today, step by step."
+### R1.2 - "Walk me through how you build a feature with AI today, step by step."
 
 Let this run long. **The workflows are that process with the approvals removed, not a new
 pipeline the user has to learn.** Most people have more process than they think and have
@@ -197,7 +202,7 @@ say that is what you are doing. A user with no process needs a proposal, exactly
 every other question here: it is the one case where the default prompts in
 `templates/runner/factory/prompts/` are the answer rather than a worked example.
 
-### [PICKER] R1.3 - "Are you willing to have code merge to main that no human has read?"
+### R1.3 - "Are you willing to have code merge to main that no human has read?"
 
 Ask it exactly that way, then show the dial. **Level 3 is the recommendation - say so, and
 treat it as where the conversation starts.** People often say 5; 5 means the factory writes
@@ -223,7 +228,7 @@ is the bottleneck the build was for.
 Six. Each produces something no template can guess. Spend the time here, especially on the
 harness ones.
 
-### [PROSE] R2.1 - "Name five things you would reject even if a user asked nicely and the code would be easy."
+### R2.1 - "Name five things you would reject even if a user asked nicely and the code would be easy."
 
 *The most valuable list in the build, and the reason a PRD is required.* Start from the
 PRD's **non-goals**, which are usually most of the way there, and read them back. Then push,
@@ -240,7 +245,7 @@ comes.
 
 **Bad answer:** *"anything that doesn't fit."*
 
-### [PROSE] R2.2 - "What must always stay true, even if an issue argues well for changing it?"
+### R2.2 - "What must always stay true, even if an issue argues well for changing it?"
 
 Hard invariants - a rate limit, an auth requirement, a privacy property, a single-tenant
 assumption. Different from out-of-scope items: those are features you will not add, these
@@ -248,7 +253,7 @@ are properties that cannot be edited. They go in **both** `MISSION.md` and
 `FACTORY_RULES.md`, deliberately, because the file read at reject time has to contain the
 rule.
 
-### [PROSE] R2.3 - "How do you check a change did not break things today, and what tells you the app is actually running?"
+### R2.3 - "How do you check a change did not break things today, and what tells you the app is actually running?"
 
 Two halves, one conversation.
 
@@ -263,7 +268,7 @@ reports "not testable" and something downstream counts that as fine.
 **Bad answer to the second half:** *"it starts up."* A process that starts, hangs and
 returns zero is indistinguishable from a healthy one.
 
-### [PROSE] R2.4 - "If someone wanted to make the tests pass without actually fixing anything, what is the easiest cheat?"
+### R2.4 - "If someone wanted to make the tests pass without actually fixing anything, what is the easiest cheat?"
 
 Ask it in those words - it is a question about their code, not about agents, and people
 answer it well. The answers are the holes: delete a test, weaken an assertion, mock the
@@ -271,7 +276,7 @@ thing under test, catch and swallow, special-case the test input.
 
 Each answer becomes a rule in `FACTORY_RULES.md` and, where possible, a structural check.
 
-### [PROSE] R2.5 - the two harness questions, and they are the hard part
+### R2.5 - the two harness questions, and they are the hard part
 
 Do not use the word "holdout" in the question. Ask the plain version, then explain what it
 becomes.
@@ -334,7 +339,7 @@ Then say the thing that makes it stick: **every defect that escapes is a class o
 can currently merge with nobody reading the diff.** That converts an abstract exercise into
 a list of specific holes they now want closed.
 
-### [PROSE] R2.5c - "Which parts of this can a machine never check?"
+### R2.5c - "Which parts of this can a machine never check?"
 
 Ask it right after the two above, while the user is already thinking about what a check
 can and cannot see. **The factory's scope is strictly smaller than the product's**, and the
@@ -349,7 +354,7 @@ That is not a downgrade. It is usually where most of the risk lives, and it is t
 that can actually be defended. But a user who thinks the factory owns the whole MVP will
 read a green gate as "the product is good", and it never meant that.
 
-### [PROSE] R2.5d - "What is the factory allowed to decide on its own and show you, and what must it stop and ask about first?"
+### R2.5d - "What is the factory allowed to decide on its own and show you, and what must it stop and ask about first?"
 
 **This question sets how much work the factory refuses**, and the default answer is
 already written: it decides **product** values (a price, a rate, a default, a name),
@@ -375,7 +380,7 @@ four escalations, zero PRs, and the same question asked four times. **The more h
 PRD, the less the factory could do.** Say that out loud when you ask this, because a user's
 instinct is to make the stop list long.
 
-### [PICKER] R2.6 - "What is the one thing that, if broken, means do not merge no matter what else passed? And what would you rather ship than block on?"
+### R2.6 - "What is the one thing that, if broken, means do not merge no matter what else passed? And what would you rather ship than block on?"
 
 **Recommend the boring default and let them argue with it:** block on the app starting,
 the E2E path passing, and no protected file being touched - and ship anything else. That
@@ -387,7 +392,7 @@ Both halves together, because they are the same dial from opposite ends. The fir
 protected file was touched. The second is the severity policy, and without it every lint
 nit blocks the loop and the user turns the factory off out of irritation.
 
-### [PROSE] R2.7 - "When something merges, what command would prove the build actually works, and what would it print?"
+### R2.7 - "When something merges, what command would prove the build actually works, and what would it print?"
 
 `deploy.sh` **refuses to move the pointer** without both. A deploy with no health check is a
 deploy that cannot fail, and a step that cannot fail is a comment. These two answers are
@@ -402,7 +407,7 @@ workflows on default-token commits at all. Tell them; do not ask. See `deploymen
 
 ---
 
-## Round 3 - the defaults, confirmed in one message  **[PICKER]**
+## Round 3 - the defaults, confirmed in one call
 
 **Send these as a single list with the proposed value filled in, and ask what to change.**
 Not one at a time, and not as questions. Every line has a working default, and most users
@@ -445,7 +450,7 @@ Four things must be **stated rather than proposed**, because there is no safe de
   if everything notifies, they mute it, and then nothing notifies. **Get an actual command,
   not a preference**: "Slack, probably" does not survive contact with the runner.
   `FACTORY_NOTIFY_CMD` needs something that runs. Ask what they would genuinely see within
-  an hour on a Saturday. `setup.md` has a working line for each.
+  on a Saturday, away from the machine. `setup.md` has a working line for each.
   **Bad answer:** *"I'll just check the file."* Nobody checks the file - that is the whole
   reason this exists. A factory whose only output is a file nobody opens is not unattended,
   it is unmonitored.

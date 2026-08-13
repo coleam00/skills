@@ -5,7 +5,7 @@ interview, because only one of them is hard to change later.
 
 | Choice | What it is | How replaceable |
 |---|---|---|
-| **The coding agent** | what turns a prompt into edits | **Very.** An afternoon. |
+| **The coding agent** | what turns a prompt into edits | **Very.** It is a config value. |
 | **The orchestrator** | what defines and runs multi-step workflows | Hard. This is the real commitment. |
 | **The dispatcher** | what decides when anything runs at all | Easy, and it must stay boring. |
 
@@ -35,7 +35,7 @@ into the prompt instead - so a stale flag becomes invisible prompt injection.
 
 > **This page got it wrong, which is the best possible demonstration of why it says so.**
 > It listed `--max-turns` as a Claude Code flag. It is not one. Claude Code **accepts it,
-> ignores it, and exits 0** - so the runner passed a cost cap on every node for weeks, the
+> ignores it, and exits 0** - so the runner passed a cost cap on every node, the
 > comments all claimed a cap was in force, and no cap ever applied. Nothing errored,
 > nothing logged, and the only reason it surfaced is that somebody ran `claude --help`.
 >
@@ -57,8 +57,8 @@ into the prompt instead - so a stale flag becomes invisible prompt injection.
 
 Pick the one already authenticated on the machine that will run the factory. Not the
 best one. The one that works today. Because the agent is genuinely swappable, this
-choice is cheap and reversible, and treating it as the big decision wastes the week
-that should have gone into component 5.
+choice is cheap and reversible, and treating it as the big decision spends attention
+that belongs in component 5.
 
 ### What does *not* port
 
@@ -216,7 +216,7 @@ forever while its own PRs rot, and throughput looks busy while going to zero.
 
 ### A node that exits 0 having done nothing
 
-Three separate versions of this showed up in one week of real dispatch, and none of them
+Three separate versions of this showed up in real dispatch, and none of them
 were visible when the same workflows were driven by hand.
 
 - **An agent hit its turn cap**, escalated, and the message named a fault that did not
