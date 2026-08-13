@@ -258,7 +258,15 @@ def audit_silent_death(run: Path):
         text = p.read_text(encoding="utf-8", errors="replace")
         if not re.search(r"^set -[a-z]*e", text, re.M):
             continue
-        has_trap = bool(re.search(r"^\s*trap\s+.*\bERR\b", text, re.M))
+        # `trap - ERR` DISARMS a trap; it is the first line of every handler, so a regex
+        # for "a line with trap and ERR on it" reports a file as protected when the only
+        # thing left is the disarm. Deleting the installation while keeping the handler --
+        # exactly what a careless edit does -- passed this check until it was verified by
+        # deliberately removing the trap and watching nothing fire. An audit that has never
+        # gone red is an audit nobody has tested, and that applies to this file too.
+        has_trap = any(
+            re.match(r"^\s*trap\s+(?!-[\s'\"])\S", line) and re.search(r"\bERR\b", line)
+            for line in text.splitlines())
         called_guarded = p.name in {"gate.sh", "merge.sh", "deploy.sh", "init-labels.sh",
                                     "install-trigger.sh"}
         if not has_trap and not called_guarded:
@@ -361,6 +369,74 @@ def audit_prompt_citations(run: Path, repo: Path | None):
     checked(f"citations: {n} FACTORY_RULES references across the prompts, all resolving")
 
 
+
+# =============================================================================
+def audit_skill_text(run: Path, repo: Path | None):
+    """The skill's own prose, where two defects and two standing instructions live.
+
+    SKILL.md is executed by an agent, so a typo in it is a bug in the procedure. Three of
+    these are real incidents; two are instructions from Cole that exist only as prose and
+    can therefore regress with nothing noticing.
+    """
+    if repo:
+        return                       # --repo mode audits a built factory; no SKILL.md
+    skill_md = SKILL / "SKILL.md"
+    if not skill_md.exists():
+        return
+    text = skill_md.read_text(encoding="utf-8")
+
+    # 1. `$` followed by a digit is substituted as a POSITIONAL ARGUMENT when the agent
+    #    renders this file. `$6 to $8` in the cost table rendered as
+    #    `**repo to C:Userscolem...**` -- it destroyed the one number a reader wanted, and
+    #    three independent sessions hit it. Amounts must be words.
+    for m in re.finditer(r"\$\d", text):
+        line = text[:m.start()].count("\n") + 1
+        finding(f"SKILL.md:{line}: `{m.group(0)}` -- a $ followed by a digit is "
+                f"substituted as a positional argument when this file is rendered. "
+                f"Write the amount as a word.")
+
+    # 2. NO COST OR DURATION ESTIMATES. Cole, 2026-08-12: "the skill needs to be updated to
+    #    not mention pricing or how long it will take, people know that going in. The
+    #    warnings at the start are bad."
+    for pat, what in ((r"(?i)\bcosts?\s+(?:about|around|roughly|approximately)\b", "a cost estimate"),
+                      (r"(?i)\btakes?\s+(?:about|around|roughly)\s+\d+\s*(?:hour|hr|minute|min|day)",
+                       "a duration estimate"),
+                      (r"(?i)\b\d+\s*(?:hours|hrs)\s+to\s+(?:build|set up|complete)\b",
+                       "a duration estimate")):
+        for m in re.finditer(pat, text):
+            line = text[:m.start()].count("\n") + 1
+            finding(f"SKILL.md:{line}: {what} -- {m.group(0)!r}. The skill does not carry "
+                    f"cost or duration; people know that going in.")
+
+    # 3. Every question id SKILL.md cites must exist in the interview, or the phase points
+    #    at nothing. The ids were renumbered R<round>.<n> and every reference had to move.
+    interview = SKILL / "references" / "interview.md"
+    if interview.exists():
+        itext = interview.read_text(encoding="utf-8")
+        cited = set(re.findall(r"\bR\d+\.\d+[a-z]?\b", text))
+        for qid in sorted(cited):
+            if qid not in itext:
+                finding(f"SKILL.md cites question {qid}, which does not exist in "
+                        f"references/interview.md")
+        checked(f"skill: {len(cited)} interview question ids cited, all defined")
+
+    # 4. Every reference and template SKILL.md names must exist on disk.
+    named = set(re.findall(r"`((?:references|templates|scripts)/[A-Za-z0-9_./-]+)`", text))
+    for rel in sorted(named):
+        if rel.endswith("/"):
+            continue
+        if not (SKILL / rel).exists() and "*" not in rel:
+            finding(f"SKILL.md names `{rel}`, which does not exist in the skill")
+    checked(f"skill: {len(named)} file paths named, all present")
+
+    # 5. Level 3 is the recommended default. Cole, 2026-08-12: "the skill should rec level
+    #    3 by default." Prose-only instructions are exactly what regresses unwatched.
+    if not re.search(r"(?i)(recommend|default|target)[^.\n]{0,60}\b(?:level\s*)?3\b", text):
+        finding("SKILL.md no longer recommends level 3 as the default, which was an "
+                "explicit instruction and lives only as prose")
+    checked("skill: level 3 is still the recommended default; no cost or duration "
+            "estimates; no positional-substitution hazards")
+
 # =============================================================================
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
@@ -386,6 +462,7 @@ def main() -> int:
                            (audit_escalation_routes, False), (audit_backend_parity, False)):
         fn(run)
     audit_prompt_citations(run, repo)
+    audit_skill_text(run, repo)
 
     if not args.quiet:
         for c in CHECKED:
