@@ -324,12 +324,16 @@ while [ "$SLOTS" -gt 0 ]; do
     [ "$DRY_RUN" -eq 0 ] && {
       # `|| true`, and it is load-bearing. A command inside a `[ cond ] && { ... }` block
       # does not chain under set -e: verified that `[ 1 -eq 1 ] && { false; echo B; }`
-      # never prints B and exits 1. So if this write failed -- and `needs-human` ->
-      # `needs-human` is an ILLEGAL transition, which is precisely what a second pass over
-      # an already-escalated PR attempts -- the ledger line below, the parent-issue
-      # labelling and the NOTIFICATION were all skipped, and the orchestrator died
-      # mid-tick leaving the rest of the queue undispatched. The escalation with the most
-      # reason to be seen was the one most likely to be silent.
+      # never prints B and exits 1. So ANY failure of this one write silently skipped the
+      # ledger line below, the parent-issue labelling and the NOTIFICATION, and killed the
+      # tick with the rest of the queue undispatched. The escalation with the most reason
+      # to be seen was the one most exposed to a silent skip.
+      #
+      # It is not hypothetical: `merged` has an EMPTY transition set, so a PR that reached
+      # `merged` and then somehow arrives here fails this write outright. (A repeat pass
+      # over an already-escalated PR does NOT -- `cmd_set` returns 0 early when the new
+      # state equals the old one, so `needs-human` -> `needs-human` is a no-op, not an
+      # error. Checked, because the opposite is the obvious assumption and it is wrong.)
       python factory/state.py set "$TARGET" state=needs-human || true
       { echo "- $(date -u +%FT%TZ)  $TARGET  fix-attempt cap reached (FACTORY_RULES.md 8)"; } \
         >> .factory/needs-human.md
