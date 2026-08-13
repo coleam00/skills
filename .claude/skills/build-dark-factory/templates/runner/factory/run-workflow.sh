@@ -147,6 +147,42 @@ escalate() {            # escalate <reason>
   exit 3
 }
 
+# THE BACKSTOP FOR THE ENTIRE CLASS OF FAILURE DESCRIBED AT read_fm ABOVE.
+#
+# That comment diagnoses the shape exactly: under `set -euo pipefail` an unguarded
+# command returning non-zero kills the script BEFORE the escalate on the next line, and
+# the result is indistinguishable from nothing having happened. It was found and fixed
+# four separate times by accident -- read_fm, fix-pr, validate-pr, gate.sh -- each time as
+# an instance. Auditing every `set -e` script for the shape found three more still live,
+# including one on the protected-path guard, so fixing instances was never going to
+# converge. Two facts made every one of them invisible rather than merely fatal:
+#
+#   1. nothing in this script trapped ERR, so a death printed nothing about itself, and
+#   2. the orchestrator dispatches this runner into a BACKGROUND subshell and never reads
+#      its exit status, so nothing downstream noticed either.
+#
+# Worked example, the one that was live: an issue with no `title:` line made
+#   TITLE="$(grep -m1 '^title:' "$ISSUE_FILE" | ...)"
+# return 1, which killed the run at that line. The issue was never moved to `in-progress`
+# (that happens further down), so `state.py next` handed the SAME issue back on the next
+# tick, and the factory re-dispatched a run that could only die, every tick, forever --
+# logging a cheerful DISPATCH line each time. Busy, progressing at zero, notifying nobody.
+#
+# THIS TRAP CANNOT CHANGE CONTROL FLOW. `set -e` already terminates the script at exactly
+# these points; the trap only makes the termination say why and route through escalate(),
+# which parks the work and notifies. It converts silent death into a loud stop.
+#
+# Deliberately NOT `set -E` (errtrace): without it the trap fires for top-level commands
+# only, which is where every instance found lives. With it, ERR also fires inside command
+# substitutions and subshells, where an escalate() would exit the SUBSHELL and leave the
+# parent running -- a duplicate, half-applied escalation that is worse than the disease.
+on_unguarded_error() {  # on_unguarded_error <rc> <line> <command>
+  trap - ERR            # never recurse: escalate() runs commands of its own
+  log "RUNNER_FAULT line $2 exited $1: $3"
+  escalate "the runner died at line $2 (exit $1) running: $3 -- this is an unguarded command failure, not a decision about the work"
+}
+trap 'on_unguarded_error "$?" "$LINENO" "$BASH_COMMAND"' ERR
+
 # --- identifiers -------------------------------------------------------------
 # ISSUE_NUM keys the worktree path. Windows MAX_PATH is 260 characters and this repo
 # already sits deep under a temp directory; the validator's path is 9 characters longer
@@ -334,7 +370,16 @@ case "$WORKFLOW" in
 
   implement-issue)
     materialise "$TARGET" || escalate "could not read the issue"
-    TITLE="$(grep -m1 '^title:' "$ISSUE_FILE" | cut -d: -f2- | sed 's/^ *//')"
+    # `|| true` for the read_fm reason, and this one was LIVE. An issue file with no
+    # `title:` line made this grep return 1 and killed the run right here -- before the
+    # issue was moved to `in-progress`, so the dispatcher handed the same issue back every
+    # tick and re-ran a workflow that could only die. Nothing else in this system requires
+    # a title: state.py prints `i.get('title', i.get('issue',''))` and factory_doctor does
+    # not check for one, so an untitled issue is a supported input everywhere except the
+    # one line that read it. On the GitHub backend `state.py body` always emits a title,
+    # which is why this only ever bit the file backend -- the one a local factory uses.
+    TITLE="$(grep -m1 '^title:' "$ISSUE_FILE" | cut -d: -f2- | sed 's/^ *//' || true)"
+    [ -n "$TITLE" ] || TITLE="$(basename "$ISSUE_FILE" .md)"
 
     if [ "$GH" -eq 1 ]; then
       BRANCH="factory/issue-$ISSUE_NUM"
@@ -480,7 +525,10 @@ case "$WORKFLOW" in
       # a PR against any branch it likes, including one nothing validated.
       git push -q -u origin "$BRANCH" || escalate "could not push $BRANCH to origin"
 
-      PR_TITLE="$(grep -m1 '^title:' "$PRFILE" | cut -d: -f2- | sed 's/^ *//')"
+      # The `|| true` is what makes the fallback on the next line reachable. Without it a
+      # PR record with no `title:` killed the run HERE, one line above the check written
+      # to handle exactly that -- the error path existed and the language got there first.
+      PR_TITLE="$(grep -m1 '^title:' "$PRFILE" | cut -d: -f2- | sed 's/^ *//' || true)"
       [ -n "$PR_TITLE" ] || PR_TITLE="$TITLE"
       # Body is everything after the front matter, plus the link GitHub acts on.
       python -c "import io,sys;t=io.open(sys.argv[1],encoding='utf-8').read();print(t.split('---',2)[2].lstrip() if t.startswith('---') else t)"         "$PRFILE" > "$RUNDIR/pr.body.md"
@@ -588,7 +636,13 @@ case "$WORKFLOW" in
     # that does the enforcing rather than the rules it enforces.
     python factory/guard.py --base "$BASE" --head "$CHECKOUT" > "$RUNDIR/gate.log" 2>&1 \
       || { git worktree remove "$WT" --force >/dev/null 2>&1 || true
-           python factory/state.py set "$TARGET" state=rejected
+           # `|| true`, because a command inside a `|| { ... }` block does NOT chain: under
+           # set -e a failure here aborts the whole block, so `escalate` on the next line
+           # never runs. Verified: `false || { false; echo B; }` never prints B and exits 1.
+           # That would turn a protected-path guard failure -- a PR touching factory/** --
+           # into an exit 1 with no escalation and no notification, on the one path whose
+           # entire job is to stop a branch from rewriting its own enforcement code.
+           python factory/state.py set "$TARGET" state=rejected || true
            escalate "protected-path guard failed on the branch under review"; }
 
     ( cd "$WT" && $FACTORY_VALIDATE_CMD ) >> "$RUNDIR/gate.log" 2>&1 || log "GATE_RED"

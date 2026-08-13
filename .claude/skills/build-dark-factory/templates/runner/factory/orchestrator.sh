@@ -252,8 +252,26 @@ dispatch() {            # dispatch <workflow> <target-file>
   # FACTORY_LOCK_HELD tells run-workflow.sh that its lock is already held by us, so it
   # does not try to take a second one. A run started BY HAND has no such variable and
   # acquires its own - see the block at the top of run-workflow.sh.
+  #
+  # THE RUNNER'S EXIT STATUS USED TO BE DISCARDED ENTIRELY. It is dispatched into a
+  # background subshell and nothing ever read `$?`, so a runner that died on an unguarded
+  # command -- the failure class documented at the top of run-workflow.sh -- left no trace
+  # anywhere the dispatcher could see. run-workflow.sh now traps ERR and escalates, which
+  # is the real fix; this is the backstop for the case where it dies before that trap is
+  # installed, or is replaced by a hand-edited copy that never had it. `|| rc=$?` rather
+  # than a bare call because `set -e` is inherited here and would otherwise kill the
+  # subshell before the line that reports the death.
+  #   rc=3 is an ordinary escalation and already reached a human.
+  #   anything else non-zero is a FAULT in the runner itself.
   ( trap 'rm -f "$lock"' EXIT INT TERM
-    FACTORY_LOCK_HELD="$lock" bash "$RUNNER" "$wf" "$target" ) \
+    rc=0
+    FACTORY_LOCK_HELD="$lock" bash "$RUNNER" "$wf" "$target" || rc=$?
+    case "$rc" in
+      0|3) : ;;
+      *) echo "[$(date -u +%FT%TZ)] RUNNER_FAULT $wf $target exited $rc with no escalation" \
+           " - the runner stopped without parking the work; $target keeps its current" \
+           " state and WILL be dispatched again. See the log above for the last line it reached." ;;
+    esac ) \
     >> "factory-$key.log" 2>&1 &
 }
 
@@ -304,7 +322,15 @@ while [ "$SLOTS" -gt 0 ]; do
     # Hit the fix cap. Not a dispatch: a stop.
     log "ESCALATE $TARGET hit the fix-attempt cap (FACTORY_RULES.md 8)"
     [ "$DRY_RUN" -eq 0 ] && {
-      python factory/state.py set "$TARGET" state=needs-human
+      # `|| true`, and it is load-bearing. A command inside a `[ cond ] && { ... }` block
+      # does not chain under set -e: verified that `[ 1 -eq 1 ] && { false; echo B; }`
+      # never prints B and exits 1. So if this write failed -- and `needs-human` ->
+      # `needs-human` is an ILLEGAL transition, which is precisely what a second pass over
+      # an already-escalated PR attempts -- the ledger line below, the parent-issue
+      # labelling and the NOTIFICATION were all skipped, and the orchestrator died
+      # mid-tick leaving the rest of the queue undispatched. The escalation with the most
+      # reason to be seen was the one most likely to be silent.
+      python factory/state.py set "$TARGET" state=needs-human || true
       { echo "- $(date -u +%FT%TZ)  $TARGET  fix-attempt cap reached (FACTORY_RULES.md 8)"; } \
         >> .factory/needs-human.md
       # AND THE ISSUE BEHIND IT, for the reason gate.sh's fail() already does it: a PR
@@ -337,7 +363,28 @@ while [ "$SLOTS" -gt 0 ]; do
       break
     fi
     log "MERGE $TARGET"
-    [ "$DRY_RUN" -eq 0 ] && { bash factory/merge.sh "$TARGET" && bash factory/deploy.sh; } ;;
+    # THE THIRD ROUTE THAT NEVER LEARNED TO ESCALATE. `merge.sh` reached from gate.sh is
+    # called as `|| fail`, and fail() parks the PR, writes the ledger and notifies. Reached
+    # from HERE -- the route `next` uses for an already-`passed` PR -- a merge failure was
+    # simply an unguarded non-zero at the end of a case branch: set -e killed the whole
+    # orchestrator tick, abandoning the rest of the dispatch loop, and merge.sh contains no
+    # factory_notify of its own. So the two ways of arriving at the same merge behaved
+    # completely differently, and the quieter one was the one that runs unattended.
+    #
+    # A failed merge is not a fault to retry: `passed` -> `open` requeues for revalidation
+    # (see state.py), which is what the PR needs after a rebase, and anything else needs a
+    # human. Escalating is the honest move because merge.sh has already printed the reason.
+    if [ "$DRY_RUN" -eq 0 ]; then
+      if bash factory/merge.sh "$TARGET"; then
+        bash factory/deploy.sh || log "DEPLOY_FAILED after merging $TARGET - the merge stands; see the log above"
+      else
+        log "MERGE_FAILED $TARGET - parking it; merge.sh printed the reason above"
+        python factory/state.py set "$TARGET" state=needs-human || true
+        echo "- $(date -u +%FT%TZ)  $TARGET  (orchestrator)  merge refused; see factory/merge.sh output" \
+          >> .factory/needs-human.md
+        log "$(factory_notify "$TARGET" "merge refused for a PR that passed every gate")"
+      fi
+    fi ;;
 
   implement-issue)
     dispatch implement-issue "$TARGET" || true

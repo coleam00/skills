@@ -101,6 +101,20 @@ FACTORY_AUTONOMY="${FACTORY_AUTONOMY:-0}"
 FACTORY_MAX_PARALLEL="${FACTORY_MAX_PARALLEL:-1}"
 FACTORY_MAX_FIX_ATTEMPTS="${FACTORY_MAX_FIX_ATTEMPTS:-2}"
 
+# How long a dispatch lock may outlive the run that took it. Both were already read by
+# factory/orchestrator.sh and neither was written down here, so the only way to discover
+# the knobs that decide when a wedged factory unwedges itself was to read the dispatcher.
+# "The one file you edit" has to actually list them or it is not that file.
+#
+# A lock is reaped early when its recorded PID is gone (that is the common case: a reboot,
+# a closed terminal, a killed run - a trap does not run when a process is KILLED), with
+# GRACE minutes of slack so a run that has not yet written its PID is never reaped out
+# from under itself. STALE is the fallback for the case where the PID cannot be checked at
+# all. Lower STALE and a long legitimate validation gets reaped mid-flight; raise it and a
+# genuinely dead lock holds a slot for that much longer.
+FACTORY_LOCK_STALE_MINUTES="${FACTORY_LOCK_STALE_MINUTES:-180}"
+FACTORY_LOCK_GRACE_MINUTES="${FACTORY_LOCK_GRACE_MINUTES:-5}"
+
 # --- the stop button ---------------------------------------------------------
 # Two of them, on purpose, because they fail in different places. The local file works
 # with the network down; the remote label is reachable from a phone. The remote half
@@ -225,6 +239,8 @@ export FACTORY_AGENT \
        FACTORY_HEALTH_MARKERS \
        FACTORY_HOLDOUT_DIR \
        FACTORY_INTERVAL_MINUTES \
+       FACTORY_LOCK_GRACE_MINUTES \
+       FACTORY_LOCK_STALE_MINUTES \
        FACTORY_MAX_BUDGET_USD \
        FACTORY_MAX_FIX_ATTEMPTS \
        FACTORY_MAX_PARALLEL \
