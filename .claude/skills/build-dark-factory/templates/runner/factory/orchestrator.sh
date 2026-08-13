@@ -307,6 +307,16 @@ while [ "$SLOTS" -gt 0 ]; do
       python factory/state.py set "$TARGET" state=needs-human
       { echo "- $(date -u +%FT%TZ)  $TARGET  fix-attempt cap reached (FACTORY_RULES.md 8)"; } \
         >> .factory/needs-human.md
+      # AND THE ISSUE BEHIND IT, for the reason gate.sh's fail() already does it: a PR
+      # parked at needs-human whose issue still reads `in-progress` is an escalation
+      # nothing can see. Observed: the cap fired, the PR was labelled, the issue was not,
+      # and the very next `state.py next` moved on to unrelated work while the escalated
+      # issue sat in a state that means "being worked on" with nothing working on it.
+      CAP_ISSUE="$(python factory/state.py get "$TARGET" 2>/dev/null | grep '^issue=' | head -1 | cut -d= -f2- || true)"
+      if [ -n "${CAP_ISSUE:-}" ]; then
+        python factory/state.py set "$CAP_ISSUE" state=needs-human >/dev/null 2>&1 || true
+        echo "- $(date -u +%FT%TZ)  $CAP_ISSUE  its PR $TARGET hit the fix-attempt cap" >> .factory/needs-human.md
+      fi
       # The third route into needs-human, and the quietest: nothing failed, a PR simply
       # stopped being worked on. Without this it is the escalation you notice last.
       log "$(factory_notify "$TARGET" "fix-attempt cap reached; no further attempts")"

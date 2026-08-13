@@ -120,6 +120,19 @@ escalate() {            # escalate <reason>
   python factory/state.py set "$TARGET" state=needs-human || true
   echo "- $(date -u +%FT%TZ)  $TARGET  ($WORKFLOW)  $*" >> .factory/needs-human.md
 
+  # AND THE ISSUE BEHIND IT. `gate.sh`'s fail() has done this for a while, with a comment
+  # explaining why; the other two escalation routes never learned it. So a PR that hit the
+  # fix cap went to needs-human while ITS ISSUE stayed `in-progress` - unlabelled, invisible
+  # as a problem, and `state.py next` cheerfully moved on to the next issue. The factory
+  # carries on while an escalated piece of work sits in a state that means "being worked on"
+  # and nothing is. FACTORY_RULES.md 7 says escalation stops activity on that issue AND its
+  # PR; one of the three routes implemented it.
+  ESC_ISSUE="$(python factory/state.py get "$TARGET" 2>/dev/null | grep '^issue=' | head -1 | cut -d= -f2- || true)"
+  if [ -n "${ESC_ISSUE:-}" ] && [ "$ESC_ISSUE" != "$TARGET" ]; then
+    python factory/state.py set "$ESC_ISSUE" state=needs-human >/dev/null 2>&1 || true
+    echo "- $(date -u +%FT%TZ)  $ESC_ISSUE  ($WORKFLOW)  its PR $TARGET escalated: $*" >> .factory/needs-human.md
+  fi
+
   # THE ONE THING THAT REACHES A HUMAN. Everything else this factory writes waits to be
   # found. `needs-human` is the only state a human must act on, so it is the only state
   # allowed to interrupt one - and if it cannot, "unattended" quietly means "unmonitored".

@@ -108,6 +108,39 @@ general assistant · a developer tool with an API · ...>.
 
 When in doubt, the answer is "that is out of scope."
 
+## Open questions - decisions nobody has made yet
+
+<!--
+  WORD THIS CAREFULLY, because the obvious wording breaks the factory.
+
+  A generated MISSION wrote "Open questions - the factory must never answer these", and
+  every rule downstream inherited it: any issue whose resolution touched one became
+  needs-human. That directly contradicts FACTORY_RULES.md §7, which says an unspecified
+  PRODUCT value is decided by the plan node, recorded, and held at the merge.
+
+  Both files are protected, so the factory cannot reconcile them - and a genuine
+  contradiction between two governance statements is itself on the stop list. The
+  contradiction escalates the very issues the policy was rewritten to unblock.
+
+  "Open" means I HAVE NOT DECIDED. It does not mean you may not propose.
+-->
+
+These are undecided, not forbidden. **The factory may propose an answer to any of them**,
+build against it, and record what it assumed - the merge is then held for a human, so
+nothing ships on a guess and nothing stops for one. See `FACTORY_RULES.md` §7.
+
+- **Q1** <the question, as a decision rather than a topic>
+- **Q2** <...>
+
+**Except these, which do stop the factory** - they are on the irreversible list
+(`FACTORY_RULES.md` §7.3) rather than open in the ordinary sense:
+
+- <the one about identity, auth, or who may act as whom>
+- <the one about migrating or deleting stored data>
+
+Once answered, an entry moves to `.factory/decisions.md` with its answer and date, and
+stops being asked. **A decision is asked once.**
+
 ## What the factory does NOT own - permanently human
 
 <!--
