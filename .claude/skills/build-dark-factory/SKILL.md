@@ -110,7 +110,7 @@ machine in. They are not built in that order. Build in this order instead:
 |---|---|---|
 | 0th | *(the PRD)* | Not a component. The input. Everything below reads it, and nothing below can be written honestly without it. |
 | 0.5th | *(the walking skeleton)* | **Greenfield only.** Not a component either, and deliberately tiny: the thinnest slice that yields one assertable behaviour. Component 5 cannot be written against software that does not exist. See Phase 0c - the danger is building the MVP here rather than a slice. |
-| 1st | **Guidance layer** (#4) | An hour of markdown, and every other component reads it. Cheapest thing with the highest leverage. |
+| 1st | **Guidance layer** (#4) | Markdown, and every other component reads it. The cheapest thing here with the highest leverage. |
 | 2nd | **Validation harness** (#5) | The long pole. Start it before you need it, because you will be wrong about it twice. |
 | 3rd | **Workflow-driven repo** (#1) | Now the workflows have rules to obey and checks to pass. |
 | 4th | **Deployment** (#3) | Close the loop to real users before you make it unattended. |
@@ -126,7 +126,7 @@ an agent" to "earn the right to walk away."
 
 ---
 
-## Phase 0. The input, and the two ways to refuse
+## Phase 0. The input, the two ways to refuse, and the greenfield path
 
 ### 0a. There has to be a PRD
 
@@ -623,9 +623,10 @@ the evidence that earns it, not a ladder to stop partway up.
   PRD goes stale and a human quietly compensates. Here nobody compensates: the factory
   builds the scope it was given until the scope is edited. Changing what the product
   is means editing `MISSION.md`, in a human commit, on purpose.
-- **Instrument tokens on day one.** Cost projections for this are wrong by 10-20x in
-  the same direction every time. One "fix an issue" run is far more agent sessions
-  than it looks like from the outside.
+- **Instrument tokens on day one, before the first unattended run.** Not as a warning -
+  as a measurement you will want and cannot reconstruct later. One "fix an issue" run is
+  far more agent sessions than it looks like from the outside, and the only way to know
+  what yours does is to have been recording from the first lap.
 - **Put one premium model in the planning slot and a cheaper one everywhere else.**
   Premium in one of the two slots that matter buys most of the quality of premium in
   both. Premium in zero slots is what actually costs you.
@@ -640,7 +641,10 @@ the evidence that earns it, not a ladder to stop partway up.
 
 ## Resources
 
-- `references/interview.md`: the full question set, per component. Read in Phase 1.
+- `references/interview.md`: the interview, in three rounds - three questions that decide
+  the project, seven only the user can answer, and one message of defaults to confirm.
+  Marks each question `[PICKER]` or `[PROSE]`, carries a recommendation for every one of
+  them, and has a one-breath plain-English line for each piece of jargon. Read in Phase 1.
 - `references/guidance-layer.md`: the three-file split, the placement test, protected
   files, and how to write an out-of-scope list that does real work. Read in Phase 2.
 - `references/validation-harness.md`: the ladder, the independence line, holdout
