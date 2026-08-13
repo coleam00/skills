@@ -65,7 +65,23 @@ git rev-parse --verify --quiet "$HEAD_REF" >/dev/null \
 # The branch must actually contain the base, or the squash silently drops work that
 # landed while this branch was in flight.
 git merge-base --is-ancestor "$BASE" "$HEAD_REF" \
-  || { echo "MERGE_REFUSED: $BRANCH is behind $BASE - rebase it and re-validate"; exit 1; }
+  || {
+       # REQUEUE, do not park. Refusing is right - squashing a stale branch silently drops
+       # whatever landed while it was in flight - but the refusal used to be terminal: the
+       # PR sat at `passed`, which nothing dispatches, and every later tick reprinted this
+       # line forever. Indistinguishable from an idle factory.
+       #
+       # The remedy the message already recommends is exactly what validate-pr does on its
+       # own, so send it back rather than telling a human to do it by hand. `passed -> open`
+       # is legal for this reason; validate-pr rebases before validating, so the requeued
+       # PR is judged on the tree that will actually merge.
+       echo "MERGE_REFUSED: $BRANCH is behind $BASE - squashing it now would silently drop whatever landed while it was in flight"
+       if python factory/state.py set "$PR_FILE" state=open >/dev/null 2>&1; then
+         echo "MERGE_REQUEUED: $PR_FILE is back to 'open'; the validator will rebase it and re-judge the rebased tree"
+       else
+         echo "MERGE_REFUSED: could not requeue $PR_FILE - it needs a human"
+       fi
+       exit 1; }
 
 # --- merge -------------------------------------------------------------------
 if [ "$GH" -eq 1 ]; then

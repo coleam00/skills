@@ -97,7 +97,22 @@ TRANSITIONS = {
     # first time round. `validating` is deliberately NOT reachable from here: it is owned
     # by a running validation and nothing else may hand it out.
     "failed": {"open", "rejected", "needs-human"},
-    "passed": {"merged", "needs-human"},
+    # `passed -> open` is the same deadlock as `failed -> open` above, one state further
+    # along, and it survived the fix to that one. Found by a full greenfield build.
+    #
+    #   the gate holds the merge on ratchet slack
+    #     -> it tells you to raise the floor
+    #       -> raising the floor is a human commit on main
+    #         -> merge.sh correctly refuses a branch that is now behind base
+    #           -> `passed` reached only {merged, needs-human}
+    #             -> the documented remedy - rebase and re-validate - is the one move the
+    #                table forbids, so the PR parks and every later tick prints the same
+    #                refusal forever, which reads exactly like an idle factory.
+    #
+    # Any commit landing on main during a lap does it; on a repo with velocity that is not
+    # an edge case. `open` is the right target: validate-pr rebases before it validates, so
+    # a requeued PR is judged on the tree that will actually merge.
+    "passed": {"merged", "open", "needs-human"},
     "merged": set(),
 }
 

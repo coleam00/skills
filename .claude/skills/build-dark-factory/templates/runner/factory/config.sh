@@ -185,3 +185,41 @@ FACTORY_HOLDOUT_DIR="${FACTORY_HOLDOUT_DIR:-.factory/holdout}"
 # Config files that must be git-ignored before any node that can commit runs. An empty
 # `git check-ignore` result means your next run publishes your key.
 FACTORY_SECRET_FILES="${FACTORY_SECRET_FILES:-.env secrets.json credentials.json}"
+
+# --- EXPORT, or half of the above is decoration -----------------------------------
+#
+# `guard.py` reads FACTORY_SIZE_CAP and FACTORY_FILE_CAP from the PROCESS ENVIRONMENT, and
+# `state.py` reads FACTORY_BACKEND the same way. Sourcing this file sets shell variables;
+# it does not put them into the environment of a python child. So editing the size cap - a
+# SAFETY knob - in "the one file you edit" silently did nothing, while the header above
+# promises the opposite: "if you find yourself editing another script to change a value,
+# that is a bug in this file". Editing this file not working is worse than that.
+#
+# Found by a full greenfield build. Exported BY NAME rather than with `set -a`, so adding
+# a variable above and forgetting it here is a visible omission rather than a silent one.
+export FACTORY_AGENT \
+       FACTORY_AUTONOMY \
+       FACTORY_BACKEND \
+       FACTORY_BUILD_INCLUDE \
+       FACTORY_E2E_FLOOR_FILE \
+       FACTORY_E2E_FLOOR_KEY \
+       FACTORY_FILE_CAP \
+       FACTORY_HEALTH_CMD \
+       FACTORY_HEALTH_MARKERS \
+       FACTORY_HOLDOUT_DIR \
+       FACTORY_INTERVAL_MINUTES \
+       FACTORY_MAX_BUDGET_USD \
+       FACTORY_MAX_FIX_ATTEMPTS \
+       FACTORY_MAX_PARALLEL \
+       FACTORY_MODEL_CHEAP \
+       FACTORY_MODEL_PREMIUM \
+       FACTORY_NOTIFY_CMD \
+       FACTORY_REQUIRED_MARKERS \
+       FACTORY_RUNNER \
+       FACTORY_SECRET_FILES \
+       FACTORY_SIZE_CAP \
+       FACTORY_STOP_FILE \
+       FACTORY_STOP_LABEL \
+       FACTORY_TASK_NAME \
+       FACTORY_VALIDATE_CMD \
+       FACTORY_VALIDATE_QUICK

@@ -592,6 +592,12 @@ one thing. An issue filed at 09:01 waits for the next tick. A push trigger that 
 fails *silently* and looks exactly like a factory with nothing to do; a poll that breaks
 is a poll you can see not running.
 
+**Install it AFTER the first lap, not here.** `install-trigger.sh` refuses below dial 1,
+and the dial does not leave 0 until Phase 7 has proven a lap by hand - so Phase 6 as
+numbered cannot be executed in order. Build the trigger's configuration now; run the
+installer at Phase 7 step 3, when the dial moves. The code is right and this ordering
+was wrong.
+
 Arm it with the installer rather than by hand, and note that it **refuses while the dial
 is at 0** - a scheduler at level 0 wakes up forever and correctly does nothing, which is
 how people convince themselves a factory is running when it has never completed a lap:

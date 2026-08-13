@@ -278,7 +278,12 @@ def check_out_of_scope(root: Path, gov: dict[str, Path], rep: Report) -> None:
     tail = body[m.end():]
     nxt = re.search(r"^#{1,3}\s", tail, re.M)
     section = tail[: nxt.start()] if nxt else tail
+    # Bullets AND bold sub-headings. Counting only bullets reported "0 items" against a
+    # MISSION whose out-of-scope section was eight bold headings with prose under each -
+    # a false negative on the single most load-bearing list in the build, and one that
+    # tells a user their governance is empty when it is fine. Found on a real build.
     items = re.findall(r"^\s*[-*]\s+\S", section, re.M)
+    items += re.findall(r"^\s*\*\*[^*\n]+\*\*\s*$", section, re.M)
     if len(items) < 5:
         rep.add(WARN, "out-of-scope",
                 f"the out-of-scope list has only {len(items)} item(s)",

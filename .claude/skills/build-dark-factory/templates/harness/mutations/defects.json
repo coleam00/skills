@@ -31,7 +31,16 @@
     "in CSS or a template, which the runner handles the same as any other:",
     "  - a colour that stops tracking state  (the class is set, the value is fixed)",
     "  - an element that stays visible       (the hide is removed; the data is still right)",
-    "  - a computed dimension pinned         (a width/position hardcoded, not derived)"
+    "  - a computed dimension pinned         (a width/position hardcoded, not derived)",
+    "",
+    "AIM AT LEAST ONE DEFECT AT EACH RUNG, and read which rung caught each one.",
+    "ci.py stops at the first red rung, so a set built only from logic defects gets",
+    "caught entirely by 'unit' - and the e2e, holdout and gate rungs are never once",
+    "shown to be able to fail. A real build scored 9/9 that way: the number read as",
+    "'the gate can fail' when all it meant was 'the unit suite can fail'. The runner",
+    "prints the catching rung per defect. If every line says 'by unit', it is not a",
+    "finished set - add one that only an end-to-end assertion would notice, and one",
+    "that only the holdout would."
   ],
 
   "_scaffold": "SCAFFOLD_EXAMPLE_DELETE_THIS_LINE_WHEN_YOU_WRITE_YOUR_OWN",
