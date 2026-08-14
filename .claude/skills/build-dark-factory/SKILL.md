@@ -31,6 +31,16 @@ That last sentence is the whole difficulty. Everything else is plumbing.
 **Build the factory into the user's repo. Do not hand them a design document.** Every
 phase below ends with files committed and something demonstrably working.
 
+![The five components of a dark factory](dark-factory-diagram.png)
+
+<!-- The diagram is for the HUMAN reading this repo, not for you. Do not describe it back
+     to the user and do not narrate it during a build - it is a reference they can open. It
+     lives at the skill root rather than in references/, because everything in there is
+     agent-read material and this is not. -->
+> **The whole system on one page.** All five components, the three governance files, and
+> the independence line. Open [`dark-factory-diagram.png`](dark-factory-diagram.png) full
+> size if you want the map before the procedure.
+
 ---
 
 ## Output discipline - read this before you write a single word to the user
@@ -719,10 +729,14 @@ they should watch out for, then answer from here, shortest first.
 
 ## Resources
 
+- **`dark-factory-diagram.png`**: the whole system on one page - the five components, the
+  three governance files, the ladder and the independence line. **For the human reading
+  this repo, not for the agent.** Do not narrate it during a build.
 - `references/interview.md`: the interview, in three rounds - three questions that decide
-  the project, seven only the user can answer, and one message of defaults to confirm.
-  Marks each question `[PICKER]` or `[PROSE]`, carries a recommendation for every one of
-  them, and has a one-breath plain-English line for each piece of jargon. Read in Phase 1.
+  the project, seven about software the user already knows, and one call of defaults to
+  confirm. **Every question goes through the question tool and carries a recommendation**,
+  no question names a concept the user has no reason to know, and there is a one-breath
+  plain-English line for each piece of jargon. Read in Phase 1.
 - `references/guidance-layer.md`: the three-file split, the placement test, protected
   files, and how to write an out-of-scope list that does real work. Read in Phase 2.
 - `references/validation-harness.md`: the ladder, the independence line, holdout
