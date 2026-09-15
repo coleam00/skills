@@ -1,4 +1,4 @@
-# Driving a real coding-agent session
+# Driving a Claude Code session
 
 How to start agent sessions on someone's machine and steer them from outside, plus
 the per-OS setup the primitives depend on. Read this with `SKILL.md`, which holds
@@ -142,6 +142,8 @@ Re-resolve the window before each step. Do not cache a handle across a long run.
 
 ## Starting a session
 
+The commands in this reference launch Claude Code. For Codex, use the provider-specific `codex exec --json` workflow in [Driving Codex](driving-codex.md) instead; do not reuse the Claude environment cleanup, session-id flags, or transcript watcher.
+
 ```bash
 S="scripts/screenctl.py"
 T="my-repo - Visual Studio Code"
@@ -206,31 +208,30 @@ half-pasted prompt from being submitted and quietly ruining a round.
 ## Waiting, and answering prompts
 
 ```bash
-python scripts/session_watch.py mark --repo "$REPO"                 # baseline
-python scripts/session_watch.py wait --repo "$REPO" --timeout 900   # blocks
+python scripts/session_watch.py mark --repo "$REPO" --session "$UUID"
+# Submit the prompt, then pass the recorded baseline using wait --since.
+python scripts/session_watch.py wait --repo "$REPO" --session "$UUID" --since <MARK> --timeout 900
 ```
 
 Never estimate with a sleep. Turns run from seconds to many minutes, and a sleep
 that is too short means the next keystrokes land mid-turn.
 
-`wait` exits 2 when it finds the transcript quiet with a tool call still
-unanswered. That is a permission prompt. Screenshot it, read which command it is
-actually asking about, and only then answer.
+`wait` exits 2 for a quiet state without proven completion. This does not
+identify a permission prompt: the agent may be running, thinking, or waiting for
+transcript output. Inspect the current UI and actual request before acting.
 
-**Answer with Enter, on the highlighted option.** Permission prompts are an
-arrow-key selection confirmed with Enter, with Escape to decline. There is no
-documented digit shortcut, and a typed digit is at best ignored and at worst
-inserted into the prompt box as literal text.
+**Inspect the selected decision before answering.** UI shortcuts and the
+highlighted option can vary by provider and version. Use the visible control for
+the authorized decision; never infer that Enter means approve-once.
 
 Be deliberate about the "don't ask again" option, because it is not one thing. For
 a Bash command it writes a permanent rule into the repository's local settings
 file. For a file edit it lasts only until the session ends. Granting the first kind
 unattended widens permissions past the end of the task.
 
-For a session that will be **filmed**, consider launching it with permissions
-pre-granted for a scoped task in a throwaway worktree instead. Every prompt you
-answer on camera leaves an artefact in the scrollback, and a clean transcript is
-worth more than a clean conscience about a worktree you are going to delete.
+For a filmed session, prepare only the permissions already authorized for the
+task. A throwaway worktree isolates source edits, not credentials, network access,
+or the rest of the machine.
 
 ---
 
@@ -243,10 +244,10 @@ python scripts/session_watch.py reads --repo "$REPO" --since <MARK> --match "CLA
 python scripts/session_watch.py reads --repo "$REPO" --all       # include subagents
 ```
 
-For any recall or memory demo, the honest question is whether the agent answered
-from context or re-read the source. `reads` settles it. If the file was read during
-the answering turn, the round is void: say so and re-run rather than keeping a
-result a viewer could take apart.
+`reads` records recognized transcript tools; it is not a complete file-access
+audit. Include startup instructions, supplied context, shell commands, tool
+coverage, child agents, and delayed output when interpreting a recall experiment.
+An absent file-read event does not prove the model never received the file.
 
 Pass `--all` whenever the driven session might have dispatched subagents. Their
 work lands in a `subagents/` subdirectory, not in the parent transcript, so without
