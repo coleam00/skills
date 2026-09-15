@@ -147,19 +147,21 @@ def png_size(path: str) -> tuple[int, int]:
 
 
 def looks_blank(path: str) -> bool:
-    """True if the image is almost certainly a solid colour.
+    """True if the image really is one flat colour.
 
     macOS returns a black or wallpaper-only screenshot, with a zero exit code,
     when Screen Recording permission is missing. That is the most dangerous
     failure in this whole script: it does not error, it hands back a picture of
-    nothing and lets the model reason about it. A cheap variance check catches it.
+    nothing and lets the model reason about it.
 
-    Heuristic, not proof: PNG scanline filtering leaves a solid image as a long
-    run of near-identical bytes, so counting distinct bytes in the decompressed
-    stream separates "a screen" from "a wall of one colour" reliably enough.
+    Counting distinct byte values in the FILTERED stream (what this used to do)
+    cannot separate that case from a legitimately plain page: a white document
+    compresses to almost all zeros too, so every ordinary white page was
+    reported as a broken capture. This decodes real pixels from a strip of
+    scanlines and asks how many colours are actually on screen.
     """
     try:
-        idat = bytearray()
+        idat, w, colour, depth = bytearray(), 0, 0, 8
         with open(path, "rb") as f:
             f.read(8)
             while chunk := f.read(8):
@@ -168,16 +170,52 @@ def looks_blank(path: str) -> bool:
                 length, kind = struct.unpack(">I4s", chunk)
                 data = f.read(length)
                 f.read(4)                      # CRC
-                if kind == b"IDAT":
+                if kind == b"IHDR":
+                    w, _h, depth, colour = struct.unpack(">IIBB", data[:10])
+                elif kind == b"IDAT":
                     idat += data
-                    if len(idat) > 400_000:
+                    if len(idat) > 600_000:
                         break
                 elif kind == b"IEND":
                     break
-        if not idat:
+        if not idat or depth != 8 or colour not in (2, 6):
             return False
-        raw = zlib.decompressobj().decompress(bytes(idat), 300_000)
-        return len(set(raw[::7])) < 4
+        bpp = 3 if colour == 2 else 4
+        stride = w * bpp
+        raw = zlib.decompressobj().decompress(bytes(idat), 4_000_000)
+        prev = bytearray(stride)
+        colours = set()
+        for y in range(200):
+            off = y * (stride + 1)
+            if off + stride + 1 > len(raw):
+                break
+            ftype = raw[off]
+            line = bytearray(raw[off + 1:off + 1 + stride])
+            if ftype == 1:
+                for i in range(bpp, stride):
+                    line[i] = (line[i] + line[i - bpp]) & 0xFF
+            elif ftype == 2:
+                for i in range(stride):
+                    line[i] = (line[i] + prev[i]) & 0xFF
+            elif ftype == 3:
+                for i in range(stride):
+                    left = line[i - bpp] if i >= bpp else 0
+                    line[i] = (line[i] + ((left + prev[i]) >> 1)) & 0xFF
+            elif ftype == 4:
+                for i in range(stride):
+                    a = line[i - bpp] if i >= bpp else 0
+                    b = prev[i]
+                    c = prev[i - bpp] if i >= bpp else 0
+                    p = a + b - c
+                    pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                    pr = a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
+                    line[i] = (line[i] + pr) & 0xFF
+            for x in range(0, stride - bpp + 1, bpp * 13):
+                colours.add(bytes(line[x:x + bpp]))
+                if len(colours) > 1:
+                    return False
+            prev = line
+        return len(colours) <= 1
     except Exception:
         return False       # never block a capture on the checker failing
 
@@ -527,12 +565,25 @@ elif OS == "Darwin":
         safe = text.replace("\\", "\\\\").replace('"', '\\"')
         _osa(f'tell application "System Events" to keystroke "{safe}"')
 
-    KEYNAME = {"enter": "return", "return": "return", "esc": "escape",
-               "escape": "escape", "tab": "tab", "space": "space",
-               "delete": "delete", "backspace": "delete",
-               "up": "up arrow", "down": "down arrow",
-               "left": "left arrow", "right": "right arrow",
-               "pageup": "page up", "pagedown": "page down"}
+    # Carbon virtual key codes. `key code` is the only deterministic path on
+    # macOS: AppleScript's `keystroke` knows just a few special names (return,
+    # tab, space, escape, delete, the arrows, page up/down) and misbehaves
+    # SILENTLY on anything else with exit code 0.
+    #
+    #   Measured against this file before the patch: `key --keys home` TYPED THE
+    #   WORD "home" into the target (upstream lacks home/end, so they fell
+    #   through to the LITERAL branch), and `key --keys backspace` did NOTHING
+    #   (`keystroke delete` is not a key name) - both printed SENT and exited 0.
+    #   Upstream bug, not a platform limitation: key codes fix all of them.
+    KEYCODE = {
+        "enter": 36, "return": 36, "esc": 53, "escape": 53, "tab": 48,
+        "space": 49, "delete": 51, "backspace": 51, "forwarddelete": 117,
+        "up": 126, "down": 125, "left": 123, "right": 124,
+        "home": 115, "end": 119, "pageup": 116, "pagedown": 121,
+        "help": 114,
+        "f1": 122, "f2": 120, "f3": 99, "f4": 118, "f5": 96, "f6": 97,
+        "f7": 98, "f8": 100, "f9": 101, "f10": 109, "f11": 103, "f12": 111,
+    }
     # Punctuation that must be spellable as a word: a backtick inside double
     # quotes is command substitution in most shells.
     LITERAL = {"backtick": "`", "grave": "`", "minus": "-", "equals": "=",
@@ -550,11 +601,22 @@ elif OS == "Darwin":
             die("BAD_KEY", f"expected exactly one non-modifier key in {keys!r}")
         k = rest[0]
         using = f" using {{{', '.join(mods)}}}" if mods else ""
-        if target := KEYNAME.get(k):
-            _osa(f'tell application "System Events" to keystroke {target}{using}')
+        # `keystroke <name>` is silent about the names it does not know. The one
+        # upstream used for "backspace" (`delete`) did nothing at all, and an
+        # unknown word was typed into the target as literal text - both with exit
+        # code 0, which reads as success. An osascript failure is now loud too.
+        if (code := KEYCODE.get(k)) is not None:
+            r = _osa(f'tell application "System Events" to key code {code}{using}')
         else:
             lit = LITERAL.get(k, k).replace("\\", "\\\\").replace('"', '\\"')
-            _osa(f'tell application "System Events" to keystroke "{lit}"{using}')
+            if len(lit) != 1:
+                die("UNKNOWN_KEY", f"{k!r} is not a key name this tool knows.",
+                    ["Known names: " + ", ".join(sorted(KEYCODE)),
+                     "Or a single character to type: cmd+v, shift+3, a"])
+            r = _osa(f'tell application "System Events" to keystroke "{lit}"{using}')
+        if r.returncode != 0:
+            die("KEY_FAILED", f"osascript refused {keys!r}: "
+                              f"{r.stderr.strip()[:200] or 'no output'}")
 
     def move_click(x: int, y: int, button: str = "left", double: bool = False) -> None:
         cli = need("cliclick",
