@@ -147,19 +147,21 @@ def png_size(path: str) -> tuple[int, int]:
 
 
 def looks_blank(path: str) -> bool:
-    """True if the image is almost certainly a solid colour.
+    """True if the image really is one flat colour.
 
     macOS returns a black or wallpaper-only screenshot, with a zero exit code,
     when Screen Recording permission is missing. That is the most dangerous
     failure in this whole script: it does not error, it hands back a picture of
-    nothing and lets the model reason about it. A cheap variance check catches it.
+    nothing and lets the model reason about it.
 
-    Heuristic, not proof: PNG scanline filtering leaves a solid image as a long
-    run of near-identical bytes, so counting distinct bytes in the decompressed
-    stream separates "a screen" from "a wall of one colour" reliably enough.
+    Counting distinct byte values in the FILTERED stream (what this used to do)
+    cannot separate that case from a legitimately plain page: a white document
+    compresses to almost all zeros too, so every ordinary white page was
+    reported as a broken capture. This decodes real pixels from a strip of
+    scanlines and asks how many colours are actually on screen.
     """
     try:
-        idat = bytearray()
+        idat, w, colour, depth = bytearray(), 0, 0, 8
         with open(path, "rb") as f:
             f.read(8)
             while chunk := f.read(8):
@@ -168,16 +170,52 @@ def looks_blank(path: str) -> bool:
                 length, kind = struct.unpack(">I4s", chunk)
                 data = f.read(length)
                 f.read(4)                      # CRC
-                if kind == b"IDAT":
+                if kind == b"IHDR":
+                    w, _h, depth, colour = struct.unpack(">IIBB", data[:10])
+                elif kind == b"IDAT":
                     idat += data
-                    if len(idat) > 400_000:
+                    if len(idat) > 600_000:
                         break
                 elif kind == b"IEND":
                     break
-        if not idat:
+        if not idat or depth != 8 or colour not in (2, 6):
             return False
-        raw = zlib.decompressobj().decompress(bytes(idat), 300_000)
-        return len(set(raw[::7])) < 4
+        bpp = 3 if colour == 2 else 4
+        stride = w * bpp
+        raw = zlib.decompressobj().decompress(bytes(idat), 4_000_000)
+        prev = bytearray(stride)
+        colours = set()
+        for y in range(200):
+            off = y * (stride + 1)
+            if off + stride + 1 > len(raw):
+                break
+            ftype = raw[off]
+            line = bytearray(raw[off + 1:off + 1 + stride])
+            if ftype == 1:
+                for i in range(bpp, stride):
+                    line[i] = (line[i] + line[i - bpp]) & 0xFF
+            elif ftype == 2:
+                for i in range(stride):
+                    line[i] = (line[i] + prev[i]) & 0xFF
+            elif ftype == 3:
+                for i in range(stride):
+                    left = line[i - bpp] if i >= bpp else 0
+                    line[i] = (line[i] + ((left + prev[i]) >> 1)) & 0xFF
+            elif ftype == 4:
+                for i in range(stride):
+                    a = line[i - bpp] if i >= bpp else 0
+                    b = prev[i]
+                    c = prev[i - bpp] if i >= bpp else 0
+                    p = a + b - c
+                    pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                    pr = a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
+                    line[i] = (line[i] + pr) & 0xFF
+            for x in range(0, stride - bpp + 1, bpp * 13):
+                colours.add(bytes(line[x:x + bpp]))
+                if len(colours) > 1:
+                    return False
+            prev = line
+        return len(colours) <= 1
     except Exception:
         return False       # never block a capture on the checker failing
 
