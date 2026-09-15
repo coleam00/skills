@@ -565,12 +565,25 @@ elif OS == "Darwin":
         safe = text.replace("\\", "\\\\").replace('"', '\\"')
         _osa(f'tell application "System Events" to keystroke "{safe}"')
 
-    KEYNAME = {"enter": "return", "return": "return", "esc": "escape",
-               "escape": "escape", "tab": "tab", "space": "space",
-               "delete": "delete", "backspace": "delete",
-               "up": "up arrow", "down": "down arrow",
-               "left": "left arrow", "right": "right arrow",
-               "pageup": "page up", "pagedown": "page down"}
+    # Carbon virtual key codes. `key code` is the only deterministic path on
+    # macOS: AppleScript's `keystroke` knows just a few special names (return,
+    # tab, space, escape, delete, the arrows, page up/down) and misbehaves
+    # SILENTLY on anything else with exit code 0.
+    #
+    #   Measured against this file before the patch: `key --keys home` TYPED THE
+    #   WORD "home" into the target (upstream lacks home/end, so they fell
+    #   through to the LITERAL branch), and `key --keys backspace` did NOTHING
+    #   (`keystroke delete` is not a key name) - both printed SENT and exited 0.
+    #   Upstream bug, not a platform limitation: key codes fix all of them.
+    KEYCODE = {
+        "enter": 36, "return": 36, "esc": 53, "escape": 53, "tab": 48,
+        "space": 49, "delete": 51, "backspace": 51, "forwarddelete": 117,
+        "up": 126, "down": 125, "left": 123, "right": 124,
+        "home": 115, "end": 119, "pageup": 116, "pagedown": 121,
+        "help": 114,
+        "f1": 122, "f2": 120, "f3": 99, "f4": 118, "f5": 96, "f6": 97,
+        "f7": 98, "f8": 100, "f9": 101, "f10": 109, "f11": 103, "f12": 111,
+    }
     # Punctuation that must be spellable as a word: a backtick inside double
     # quotes is command substitution in most shells.
     LITERAL = {"backtick": "`", "grave": "`", "minus": "-", "equals": "=",
@@ -588,11 +601,22 @@ elif OS == "Darwin":
             die("BAD_KEY", f"expected exactly one non-modifier key in {keys!r}")
         k = rest[0]
         using = f" using {{{', '.join(mods)}}}" if mods else ""
-        if target := KEYNAME.get(k):
-            _osa(f'tell application "System Events" to keystroke {target}{using}')
+        # `keystroke <name>` is silent about the names it does not know. The one
+        # upstream used for "backspace" (`delete`) did nothing at all, and an
+        # unknown word was typed into the target as literal text - both with exit
+        # code 0, which reads as success. An osascript failure is now loud too.
+        if (code := KEYCODE.get(k)) is not None:
+            r = _osa(f'tell application "System Events" to key code {code}{using}')
         else:
             lit = LITERAL.get(k, k).replace("\\", "\\\\").replace('"', '\\"')
-            _osa(f'tell application "System Events" to keystroke "{lit}"{using}')
+            if len(lit) != 1:
+                die("UNKNOWN_KEY", f"{k!r} is not a key name this tool knows.",
+                    ["Known names: " + ", ".join(sorted(KEYCODE)),
+                     "Or a single character to type: cmd+v, shift+3, a"])
+            r = _osa(f'tell application "System Events" to keystroke "{lit}"{using}')
+        if r.returncode != 0:
+            die("KEY_FAILED", f"osascript refused {keys!r}: "
+                              f"{r.stderr.strip()[:200] or 'no output'}")
 
     def move_click(x: int, y: int, button: str = "left", double: bool = False) -> None:
         cli = need("cliclick",
