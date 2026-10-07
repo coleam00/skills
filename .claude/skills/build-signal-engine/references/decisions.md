@@ -89,3 +89,27 @@ saves on reading, never on the cost of fetching the data.
 | The decision on every item | a decision model with typed answers (TypeSafe's Jev via OpenRouter is the reference), or the smallest LLM that returns structured output reliably |
 | Reading and writing the digest | a mid-tier LLM, once per run |
 | Content ideas, weekly roll-up (optional) | the same or a stronger model, once per run or week |
+
+## Calling Jev (TypeSafe's decision model on OpenRouter)
+
+One POST per item, with the user's OpenRouter key as a Bearer token:
+
+```
+POST https://openrouter.ai/api/alpha/decisions
+{"model": "typesafe/jev-1.13",
+ "state": "<title + first ~1,500 chars of the body + url>",
+ "questions": {
+   "relevance": {"type": "score", "instructions": "<the relevance question>",
+                 "criteria": ["<level 0>", "<level 1>", "...up to 10 levels"]},
+   "new":       {"type": "noul", "instructions": "<the 'something new' question>",
+                 "criteria": {"true": "<what yes means>", "false": "<what no means>"}}}}
+```
+
+The response has `answers`: a `noul` comes back as `{"noul": <probability of yes>}`, a
+`score` as `{"score": <weighted level, 0 to levels-1>, "probabilities": {...}}`; divide the
+score by `levels - 1` for a 0-1 number. A `choice` question takes a dict of option names to
+descriptions and returns `{"choice": ..., "probabilities": {...}}`. Each call is a few
+hundred milliseconds and a fraction of a cent, so send every item in parallel (8-16 at a
+time), with a 2-second timeout and a retry on 429 and 5xx. One item per request: putting
+several items in one state makes them interact. If a call fails, the item gets no verdict
+and goes to the reading pass, never dropped.

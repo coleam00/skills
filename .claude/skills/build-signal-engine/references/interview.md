@@ -105,8 +105,11 @@ has a public archive; a private server is not a source the engine can read legit
 
 **What it becomes:** the keep/drop examples in `PROFILE.md`, the test set for Stage 4, and
 the wording of the decision question. This is the most valuable answer in the interview.
-If they cannot name any from memory, offer to pull a sample of real items from their
-sources after Stage 2 and have them sort it then; note that in `PROFILE.md`.
+Ask for their own examples first and make typing them the recommended option. Draft two or
+three plausible ones from their earlier answers as a starting point they can edit. Only if
+they cannot name any from memory, offer to pull a sample of real items from their sources
+after Stage 2 and have them sort it then; never mark that fallback as recommended, and note
+it in `PROFILE.md`.
 
 **Push back on:** examples that are all one kind. If every "keep" is a model release, ask
 for one that is not, or the question will only ever keep model releases.

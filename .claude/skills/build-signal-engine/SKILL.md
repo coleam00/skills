@@ -199,6 +199,8 @@ or a sharper question. Then it runs on its own.
   print that file or a key, not even to check it: check that a key is set by its name. If
   one is missing, ask the user to add it themselves rather than pasting it into the chat.
 - Test every run against a throwaway database, never the one that will go live.
+- On Windows, force UTF-8 output from the start (`PYTHONIOENCODING=utf-8` or reconfigure
+  stdout). Titles from communities carry emoji and non-English text that crash the console.
 - Measure the decision pass by running the same rows with and without it: rows the LLM
   read, tokens, wall time, and which rows it would have kept that the pass dropped.
 - LLMs vary between runs too. A row that passed once and not the next time is not proof

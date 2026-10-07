@@ -107,6 +107,10 @@ Where people using the tools report what they found, often before anyone writes 
 
 ## Proof for Stages 1-2
 
+A platform's run record can post charges several seconds after the run returns (Apify does,
+and the per-result charge lands after the start charge). Settle costs once at the end of the
+run by polling each run record until its total stops changing; a single read under-counts.
+
 For each source, report in one line: how it is pulled, items returned, items stored, and the count on
 an immediate second run (should be 0 or close to it). For a paid source, add the real cost
 of that run from the provider's own run record.
