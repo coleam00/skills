@@ -53,7 +53,9 @@ consequence (a deprecation, a new mode, a price change). Most have no feed.
   the product's public changelog page rather than the docs one, or a raw `CHANGELOG.md`
   in the repo. Test each URL and check it splits before adding it.
 - **GitHub releases:** use the GitHub releases API, not the releases page. It is free, and
-  the page read as Markdown can come back as "There was an error while loading".
+  the page read as Markdown can come back as "There was an error while loading". Through a
+  page fetcher, keep `per_page` small (20): a busy repo's releases JSON passes Apify Web
+  Fetch's 10 MB limit, or use the project's own changelog page instead.
 - **Consumer products** (chat apps, assistants) usually publish release notes on their help
   center. Those are often the most relevant source for someone who is not a developer.
 
@@ -100,6 +102,9 @@ Where people using the tools report what they found, often before anyone writes 
 ## Cost rules for paid sources
 
 - **Cap every run** (max items and max spend, if the provider supports it).
+- **Respect the platform's concurrent-run limit.** Apify's plans cap runs in flight (5 on a
+  starter plan) and answer the extra ones with HTTP 402, which looks like an empty balance.
+  Run at most 4 at a time and retry a 402 after a short wait.
 - **Paid sources run on the daily schedule only,** never on a frequent scan. A source that
   quietly runs on an hourly job costs 24 times what was planned.
 - **You pay for rows you drop.** An engagement floor in code does not refund the provider.
