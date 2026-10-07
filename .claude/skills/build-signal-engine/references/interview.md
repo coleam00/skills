@@ -105,8 +105,10 @@ has a public archive; a private server is not a source the engine can read legit
 
 **What it becomes:** the keep/drop examples in `PROFILE.md`, the test set for Stage 4, and
 the wording of the decision question. This is the most valuable answer in the interview.
-Ask for their own examples first and make typing them the recommended option. Draft two or
-three plausible ones from their earlier answers as a starting point they can edit. Only if
+Ask for their own examples first: say in the question that they can type their own three and
+three in the free-text answer ("Other"), which is the answer you want most. Do not make
+"I'll type my own" an option; picking an option opens no text box. Offer two or three
+plausible drafts from their earlier answers as multi-select options they can accept. Only if
 they cannot name any from memory, offer to pull a sample of real items from their sources
 after Stage 2 and have them sort it then; never mark that fallback as recommended, and note
 it in `PROFILE.md`.

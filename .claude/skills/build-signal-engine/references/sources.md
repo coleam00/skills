@@ -65,7 +65,10 @@ Where people using the tools report what they found, often before anyone writes 
 - **Reddit:** the official API needs approval under Reddit's developer terms, and
   unauthenticated JSON is unreliable. The practical route is a hosted scraper (an Apify
   Actor, for example). Use listing URLs that encode the window
-  (`/r/<sub>/top/?t=day` or `?t=week`), cap posts per subreddit, skip comments.
+  (`/r/<sub>/top/?t=day` or `?t=week`), cap posts per subreddit, skip comments. Check
+  whether the scraper's post limit is per subreddit or per run: `harshmaur/reddit-scraper`'s
+  is per subreddit, and five subreddits in one run with a high limit ran straight into its
+  $0.50 spending cap. One run per subreddit with its own small cap keeps the bill predictable.
   Scrapers differ a lot in speed: in testing, `harshmaur/reddit-scraper` returned 299 posts
   in 30 seconds and another took 7 minutes for 27. If a run is that slow, that is when to
   try another one, unless the user named it.
