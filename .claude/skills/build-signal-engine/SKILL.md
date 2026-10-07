@@ -196,8 +196,11 @@ or a sharper question. Then it runs on its own.
 ## Operating facts
 
 - Keys live in the repo's gitignored env file and the engine loads them from there. Never
-  print that file or a key, not even to check it: check that a key is set by its name. If
-  one is missing, ask the user to add it themselves rather than pasting it into the chat.
+  read or output that file with any tool or command (cat, sed, grep, Get-Content, Read,
+  `open()`), not even "masked": a masking regex that is slightly wrong prints every key. To
+  check a key, load the file with python-dotenv inside a program and print only the key's
+  name and whether it is set. If one is missing, ask the user to add it themselves rather
+  than pasting it into the chat.
 - Test every run against a throwaway database, never the one that will go live.
 - On Windows, force UTF-8 output from the start (`PYTHONIOENCODING=utf-8` or reconfigure
   stdout). Titles from communities carry emoji and non-English text that crash the console.

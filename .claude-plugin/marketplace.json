@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "skills",
-      "version": "1.4.4",
+      "version": "1.4.5",
       "displayName": "Cole's AI Skills",
       "source": "./",
       "skills": [
