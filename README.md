@@ -8,7 +8,7 @@ A skill is a folder with a `SKILL.md` in it: a name, a description of when to us
 should follow. Your agent loads the description at startup and pulls in the full skill only when the work matches.
 That's the whole idea, and it's why skills scale where a 2,000-line `CLAUDE.md` doesn't.
 
-These 34 skills are the AI Layer from my [Agentic Coding course](https://dynamous.ai). They're built around one
+These 35 skills are the AI Layer from my [Agentic Coding course](https://dynamous.ai). They're built around one
 loop I run on nearly every ticket:
 
 **prime → plan → implement → validate → review → commit → PR**
@@ -31,7 +31,7 @@ Run these two commands inside Claude Code:
 /plugin install skills@cole-medin
 ```
 
-That's it. All 34 skills, managed and read-only, and `/plugin marketplace update` pulls new ones as I add them.
+That's it. All 35 skills, managed and read-only, and `/plugin marketplace update` pulls new ones as I add them.
 Plugin skills are namespaced, so you invoke them as `/skills:piv-implement`.
 
 The whole set costs roughly 4,400 tokens of always-on context (just the descriptions; the bodies load only when a
@@ -144,6 +144,12 @@ For the last two, restart your session (or run `/skills`) and they'll show up.
 | Skill | What it does |
 |---|---|
 | `build-dark-factory` | Takes a PRD and builds a repo around it that ships validated code with nobody at the keyboard. All five components, in construction order, plus a deterministic audit of what you built. It encodes the AI coding process you already run rather than replacing it, and it deliberately does not write the PRD: bring one, or make one with `plan-create-prd` first |
+
+**Keeping up: a signal engine**
+
+| Skill | What it does |
+|---|---|
+| `build-signal-engine` | Interviews you about what you need to keep up with, what you missed last month and where it showed up, then builds a system from scratch that reads every source you care about (changelogs, communities, feeds, videos), makes a quick decision on every item, and hands an LLM only what survives for one daily digest. Built a stage at a time into your repo, each proven on real data |
 
 **Tools**
 
