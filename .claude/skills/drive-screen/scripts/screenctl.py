@@ -33,6 +33,8 @@ went wrong is inspectable afterwards instead of being reconstructed from memory.
 from __future__ import annotations
 
 import argparse
+import base64
+import json
 import datetime
 import os
 import platform
@@ -96,7 +98,7 @@ def run_utf8(cmd: list[str], **kw) -> str:
     the user's own clipboard back afterwards, that turns a borrowed clipboard
     into a corrupted one.
     """
-    return subprocess.run(cmd, capture_output=True, **kw).stdout.decode(
+    return subprocess.run(cmd, capture_output=True, check=True, **kw).stdout.decode(
         "utf-8", "replace")
 
 
@@ -299,7 +301,9 @@ if OS == "Windows":
 
     def _send(evs: list) -> None:
         arr = (_INPUT * len(evs))(*evs)
-        user32.SendInput(len(evs), arr, ctypes.sizeof(_INPUT))
+        accepted = user32.SendInput(len(evs), arr, ctypes.sizeof(_INPUT))
+        if accepted != len(evs):
+            die("INPUT_FAILED", f"Windows accepted {accepted} of {len(evs)} input events; verify target state")
 
     def _key_ev(vk: int, up: bool):
         i = _INPUT(type=1)
@@ -458,10 +462,9 @@ elif OS == "Darwin":
     def _osa(script: str, lang: str = "AppleScript"):
         return run(["osascript", "-l", lang, "-e", script])
 
-    # JXA rather than AppleScript: it returns a delimited string in one call, so
-    # the whole window list costs one osascript round trip. That matters because
-    # each System Events call carries real latency (PyWinCtl documents 400-500ms
-    # per call for the same mechanism on Apple Silicon).
+    # System Events does not expose a portable stable window handle. Use an
+    # explicit PID/title fingerprint, never an ordinal that changes on raise.
+    # Renamed windows and duplicate titles must be rediscovered/refused.
     _LIST = r"""
     var out = [];
     var se = Application("System Events");
@@ -472,67 +475,73 @@ elif OS == "Darwin":
       for (var j = 0; j < wins.length; j++) {
         try {
           var pos = wins[j].position(), sz = wins[j].size();
-          out.push([p.name() + "#" + j, wins[j].name() || p.name(),
-                    pos[0], pos[1], sz[0], sz[1]].join(""));
+          out.push([p.unixId(), wins[j].name(),
+                    pos[0], pos[1], sz[0], sz[1]]);
         } catch (e) {}
       }
     }
-    out.join("\n");
+    JSON.stringify(out);
     """
 
+    def _mac_id(pid: int, title: str) -> str:
+        encoded = base64.urlsafe_b64encode(title.encode("utf-8")).decode("ascii")
+        return f"{pid}:{encoded}"
+
+    def _osa_checked(script: str, code: str, lang: str = "AppleScript"):
+        result = _osa(script, lang)
+        if result.returncode != 0:
+            die(code, result.stderr.strip()[:300] or "System Events operation failed")
+        return result
+
     def list_windows() -> list[Win]:
-        r = _osa(_LIST, "JavaScript")
-        if r.returncode != 0:
-            if "-25211" in r.stderr or "assistive" in r.stderr.lower():
-                die("NO_ACCESSIBILITY", "System Events is not allowed assistive access.",
-                    ["Grant Accessibility to the app that RUNS this command:",
-                     "  System Settings > Privacy & Security > Accessibility",
-                     "The grant attaches to the host app (Terminal, iTerm, VS Code),",
-                     "never to python, and it is dropped when that app updates.",
-                     "Then re-run: screenctl.py doctor"])
-            die("LIST_FAILED", r.stderr.strip()[:300] or "could not enumerate windows")
-        out = []
-        for line in r.stdout.splitlines():
-            parts = line.split("")
-            if len(parts) == 6:
-                wid, title, x, y, w, h = parts
-                try:
-                    out.append(Win(wid, title, int(float(x)), int(float(y)),
-                                   int(float(w)), int(float(h))))
-                except ValueError:
-                    continue
-        return out
+        r = _osa_checked(_LIST, "LIST_FAILED", "JavaScript")
+        try:
+            rows = json.loads(r.stdout)
+            return [Win(_mac_id(int(pid), title), title, int(x), int(y), int(w), int(h))
+                    for pid, title, x, y, w, h in rows]
+        except (TypeError, ValueError):
+            die("LIST_FAILED", "System Events returned invalid window data")
 
     def foreground_id() -> str:
-        return _osa('tell application "System Events" to get name of first '
-                    'application process whose frontmost is true').stdout.strip()
+        r = _osa_checked(r'''var se = Application("System Events");
+var p = se.applicationProcesses.whose({frontmost: true})[0];
+JSON.stringify([p.unixId(), p.windows[0].name()]);''', "FOCUS_FAILED", "JavaScript")
+        try:
+            pid, title = json.loads(r.stdout)
+            return _mac_id(int(pid), title)
+        except (TypeError, ValueError):
+            return ""
 
     def same_window(win: Win) -> bool:
-        # Identity on macOS is the owning process: AXRaise has already brought the
-        # right window of that process to the front.
-        return foreground_id() == win.id.rsplit("#", 1)[0]
+        # The front window must match, and its fingerprint must still be unique.
+        return (foreground_id() == win.id
+                and sum(w.id == win.id for w in list_windows()) == 1)
 
     def raise_window(win: Win) -> None:
-        app, idx = win.id.rsplit("#", 1)
-        app = app.replace('"', '\\"')
-        _osa(f'tell application "System Events" to tell process "{app}" '
-             f'to set frontmost to true')
-        _osa(f'tell application "System Events" to tell process "{app}" '
-             f'to perform action "AXRaise" of window {int(idx) + 1}')
+        pid, _ = win.id.split(":", 1)
+        # Select again by the exact fingerprint in the same script that raises;
+        # never retain the enumeration index across foreground changes.
+        _osa_checked(f'''var se = Application("System Events");
+var p = se.applicationProcesses.whose({{unixId: {int(pid)}}})[0];
+var wins = p.windows.whose({{name: {json.dumps(win.title)}}});
+if (wins.length !== 1) throw new Error("Window title is missing or ambiguous");
+p.frontmost = true;
+wins[0].actions.byName("AXRaise").perform();''', "FOCUS_FAILED", "JavaScript")
 
     def unlock_foreground() -> None:
         pass  # macOS has no foreground lock to defeat
 
     def type_text(text: str) -> None:
         safe = text.replace("\\", "\\\\").replace('"', '\\"')
-        _osa(f'tell application "System Events" to keystroke "{safe}"')
+        _osa_checked(f'tell application "System Events" to keystroke "{safe}"', "TYPE_FAILED")
 
-    KEYNAME = {"enter": "return", "return": "return", "esc": "escape",
-               "escape": "escape", "tab": "tab", "space": "space",
-               "delete": "delete", "backspace": "delete",
-               "up": "up arrow", "down": "down arrow",
-               "left": "left arrow", "right": "right arrow",
-               "pageup": "page up", "pagedown": "page down"}
+    KEYNAME = {"enter": 36, "return": 36, "esc": 53, "escape": 53,
+               "tab": 48, "space": 49, "delete": 117, "backspace": 51,
+               "up": 126, "down": 125, "left": 123, "right": 124,
+               "pageup": 116, "pagedown": 121, "home": 115, "end": 119,
+               "f1": 122, "f2": 120, "f3": 99, "f4": 118, "f5": 96,
+               "f6": 97, "f7": 98, "f8": 100, "f9": 101, "f10": 109,
+               "f11": 103, "f12": 111}
     # Punctuation that must be spellable as a word: a backtick inside double
     # quotes is command substitution in most shells.
     LITERAL = {"backtick": "`", "grave": "`", "minus": "-", "equals": "=",
@@ -550,17 +559,21 @@ elif OS == "Darwin":
             die("BAD_KEY", f"expected exactly one non-modifier key in {keys!r}")
         k = rest[0]
         using = f" using {{{', '.join(mods)}}}" if mods else ""
-        if target := KEYNAME.get(k):
-            _osa(f'tell application "System Events" to keystroke {target}{using}')
+        if k in KEYNAME:
+            r = _osa(f'tell application "System Events" to key code {KEYNAME[k]}{using}')
         else:
+            if k not in LITERAL and len(k) != 1:
+                die("BAD_KEY", f"unknown key {k!r}")
             lit = LITERAL.get(k, k).replace("\\", "\\\\").replace('"', '\\"')
-            _osa(f'tell application "System Events" to keystroke "{lit}"{using}')
+            r = _osa(f'tell application "System Events" to keystroke "{lit}"{using}')
+        if r.returncode != 0:
+            die("KEY_FAILED", r.stderr.strip()[:300] or "AppleScript key event failed")
 
     def move_click(x: int, y: int, button: str = "left", double: bool = False) -> None:
         cli = need("cliclick",
                    "brew install cliclick   (macOS ships no coordinate-click CLI)")
         run([cli, f"{'dc' if double else ('rc' if button == 'right' else 'c')}:"
-                  f"{int(x)},{int(y)}"])
+                  f"{int(x)},{int(y)}"], check=True)
 
     def scroll(win: Win, amount: int) -> None:
         # cliclick has no wheel verb, so page keys stand in. Documented rather
@@ -653,7 +666,7 @@ else:
 
     def type_text(text: str) -> None:
         run([need("xdotool", "sudo apt install xdotool"),
-             "type", "--clearmodifiers", "--delay", "12", "--", text])
+             "type", "--clearmodifiers", "--delay", "12", "--", text], check=True)
 
     XK = {"enter": "Return", "return": "Return", "esc": "Escape",
           "escape": "Escape", "tab": "Tab", "space": "space",
@@ -671,7 +684,7 @@ else:
         parts = [XK.get(k.strip().lower(), k.strip())
                  for k in keys.split("+") if k.strip()]
         run([need("xdotool", "sudo apt install xdotool"),
-             "key", "--clearmodifiers", "+".join(parts)])
+             "key", "--clearmodifiers", "+".join(parts)], check=True)
 
     def move_click(x: int, y: int, button: str = "left", double: bool = False) -> None:
         xdo = need("xdotool", "sudo apt install xdotool")
@@ -742,9 +755,11 @@ def resolve(title: str, wid: str | None = None) -> Win:
     default and this is for when they stop working.
     """
     if wid:
-        for w in list_windows():
-            if w.id == wid:
-                return w
+        matches = [w for w in list_windows() if w.id == wid]
+        if len(matches) > 1:
+            die("AMBIGUOUS", f"id {wid!r} identifies multiple windows; refusing")
+        if matches:
+            return matches[0]
         die("NO_SUCH_ID", f"no visible window has id {wid!r}",
             ["Handles change when a window is closed and reopened.",
              "Run `screenctl.py list` for the current ones."])
@@ -763,7 +778,9 @@ def resolve(title: str, wid: str | None = None) -> Win:
              # then no title is long enough to separate them. Suggesting only a
              # longer title sends the caller looking for something that does not
              # exist.
-             "--id is the only way to separate windows whose titles are equal."])
+             "On macOS identical titles in one process cannot be distinguished;",
+             "rename one window before continuing." if OS == "Darwin" else
+             "--id can separate windows whose titles are equal."])
     return hits[0]
 
 
@@ -780,7 +797,7 @@ def focus(title: str, settle: float = 0.45, wid: str | None = None) -> Win:
     if same_window(win):
         log(f"FOCUS {win.title}")
         print(f"FOCUS_OK: {win.title}")
-        return resolve(title, wid)      # re-read geometry after the restore
+        return resolve("", win.id)      # refresh the proven target, not a changed title
 
     unlock_foreground()
     raise_window(win)
@@ -788,7 +805,7 @@ def focus(title: str, settle: float = 0.45, wid: str | None = None) -> Win:
     if same_window(win):
         log(f"FOCUS(unlock) {win.title}")
         print(f"FOCUS_OK (after unlock): {win.title}")
-        return resolve(title, wid)
+        return resolve("", win.id)
 
     fg = next((w for w in list_windows() if w.id == foreground_id()), None)
     die("FOCUS_FAILED",
@@ -823,8 +840,8 @@ def _die_focus_lost(sent: int, total: int) -> None:
     # checks per chunk, focus can move partway THROUGH a chunk, and measured
     # live that lost 9 characters of a 20-character chunk.
     if TYPE_CHUNK == 1:
-        landed = [f"All {sent} characters sent reached the target; each one was",
-                  "sent with focus confirmed immediately beforehand."]
+        landed = [f"{sent} characters were requested with focus checked before each send.",
+                  "Delivery is not confirmed; focus can change between check and send."]
     else:
         landed = [f"Of the {sent} characters sent, up to the last {TYPE_CHUNK} may",
                   "NOT have reached the target: focus moved during that chunk."]
@@ -884,7 +901,7 @@ def act_type(a) -> None:
     chunks = [a.text[i:i + TYPE_CHUNK] for i in range(0, len(a.text), TYPE_CHUNK)]
     sent = 0
     for n, piece in enumerate(chunks):
-        if n and not same_window(win):
+        if not same_window(win):
             _die_focus_lost(sent, len(a.text))
         type_text(piece)
         sent += len(piece)
@@ -909,42 +926,39 @@ def act_paste(a) -> None:
     else:
         die("NO_PAYLOAD", "paste needs --file or --text")
 
-    # The clipboard belongs to the human. Borrow it and give it back.
+    # Refusal must leave the clipboard untouched, and failures after borrowing
+    # must restore it. We preserve text only; rich clipboard formats are outside
+    # this CLI's contract.
+    win = focus(a.title, wid=a.id)
     try:
         saved = get_clipboard()
-    except Exception:
-        saved = None
+    except Exception as exc:
+        die("CLIPBOARD_READ_FAILED", str(exc))
 
-    set_clipboard(payload)
-    time.sleep(0.2)
-
-    def norm(s: str) -> str:
-        return s.replace("\r\n", "\n").rstrip("\n")
-
-    # Compare normalised. A round trip through the OS clipboard routinely adds or
-    # drops one trailing newline, and a strict compare turns a paste that would
-    # have worked into a refusal.
-    if norm(get_clipboard()) != norm(payload):
-        die("CLIPBOARD_MISMATCH", "the clipboard did not take the payload.",
-            ["Nothing was pasted. Retry; if it repeats, another application is",
-             "holding the clipboard open."])
-
-    focus(a.title, wid=a.id)
-    send_chord(PASTE_CHORD)
-    time.sleep(0.6)
-    log(f"PASTE {len(payload)} chars into {a.title!r}")
-    print(f"PASTED {len(payload)} chars verbatim (no Enter sent)")
-
-    if saved is not None and not a.keep_clipboard:
-        try:
-            set_clipboard(saved)
-            print("CLIPBOARD_RESTORED")
-        except Exception:
-            print("CLIPBOARD_RESTORE_FAILED (the payload is still on the clipboard)")
+    try:
+        set_clipboard(payload)
+        time.sleep(0.2)
+        if get_clipboard() != payload:
+            die("CLIPBOARD_MISMATCH", "the clipboard did not take the exact payload; nothing pasted")
+        if not same_window(win):
+            die("FOCUS_FAILED", "focus changed while preparing clipboard; nothing pasted")
+        send_chord(PASTE_CHORD)
+        time.sleep(0.6)
+        log(f"PASTE {len(payload)} chars into {a.title!r}")
+        print(f"PASTED {len(payload)} chars (paste requested; verify in the target)")
+    finally:
+        if not a.keep_clipboard:
+            try:
+                set_clipboard(saved)
+                print("CLIPBOARD_RESTORED (text only)")
+            except Exception:
+                die("CLIPBOARD_RESTORE_FAILED", "could not restore the previous clipboard text")
 
 
 def act_click(a) -> None:
-    focus(a.title, wid=a.id)
+    win = focus(a.title, wid=a.id)
+    if not same_window(win):
+        die("FOCUS_FAILED", "focus changed before click")
     move_click(a.x, a.y, "right" if a.right else "left", a.double)
     log(f"CLICK {a.x},{a.y} in {a.title!r}")
     print(f"CLICKED {a.x},{a.y}"
@@ -1007,9 +1021,13 @@ def act_doctor(a) -> None:
         # cannot see any of it. Astral characters are included because they are
         # a surrogate pair and exercise a different path again.
         probe = "screenctl-doctor café ★ 日本語 \U0001F680"
-        set_clipboard(probe)
-        rt = get_clipboard().strip() == probe
-        set_clipboard(before)
+        try:
+            set_clipboard(probe)
+            rt = get_clipboard().strip() == probe
+        finally:
+            # Doctor is a probe, not permission to replace the user's clipboard.
+            # Restore even when the round-trip read itself fails.
+            set_clipboard(before)
         print(f"clipboard_roundtrip: {'ok' if rt else 'FAILED (non-ASCII is corrupted)'}")
         ok &= rt
     except Exception as e:
@@ -1091,7 +1109,9 @@ def main() -> int:
     elif a.action == "key":
         if not a.keys:
             die("NO_KEYS", "--keys is required, e.g. enter, esc, ctrl+shift+p")
-        focus(a.title, wid=a.id)
+        win = focus(a.title, wid=a.id)
+        if not same_window(win):
+            die("FOCUS_FAILED", "focus changed before key event")
         send_chord(a.keys)
         time.sleep(0.3)
         log(f"KEY {a.keys} into {a.title!r}")
@@ -1102,6 +1122,8 @@ def main() -> int:
         act_click(a)
     elif a.action == "scroll":
         win = focus(a.title, wid=a.id)
+        if not same_window(win):
+            die("FOCUS_FAILED", "focus changed before scroll")
         scroll(win, a.amount)
         log(f"SCROLL {a.amount} in {a.title!r}")
         print(f"SCROLLED {a.amount}")
