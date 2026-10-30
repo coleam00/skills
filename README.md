@@ -8,7 +8,7 @@ A skill is a folder with a `SKILL.md` in it: a name, a description of when to us
 should follow. Your agent loads the description at startup and pulls in the full skill only when the work matches.
 That's the whole idea, and it's why skills scale where a 2,000-line `CLAUDE.md` doesn't.
 
-These 35 skills are the AI Layer from my [Agentic Coding course](https://dynamous.ai). They're built around one
+These skills build on the AI Layer from my [Agentic Coding course](https://dynamous.ai). They're built around one
 loop I run on nearly every ticket:
 
 **prime → plan → implement → validate → review → commit → PR**
@@ -31,11 +31,11 @@ Run these two commands inside Claude Code:
 /plugin install skills@cole-medin
 ```
 
-That's it. All 35 skills, managed and read-only, and `/plugin marketplace update` pulls new ones as I add them.
+That's it. The skills are managed and read-only, and `/plugin marketplace update` pulls new ones as I add them.
 Plugin skills are namespaced, so you invoke them as `/skills:piv-implement`.
 
-The whole set costs roughly 4,400 tokens of always-on context (just the descriptions; the bodies load only when a
-skill fires). Run `claude plugin details skills` to see the per-skill breakdown, and disable the plugin any
+Only the descriptions stay in context; the bodies load when a skill fires. Run `claude plugin details skills`
+to see the current per-skill breakdown, and disable the plugin any
 time with `/plugin`.
 
 > **If that first command fails with `Permission denied (publickey)`:** the `owner/repo` shorthand prefers SSH,
@@ -94,6 +94,7 @@ For the last two, restart your session (or run `/skills`) and they'll show up.
 |---|---|
 | `plan-create-prd` | Interviews you into a problem-first PRD. Intent, never engineering decisions |
 | `plan-architecture` | A working session on *how* to build it: stack, data shape, trade-offs, risks |
+| `plan-with-priorities` | Elicits what matters before recommending options, with small spikes and explicit tradeoffs |
 | `piv-slice-epic` | Slices an epic plus its architecture into PIV-sized tickets with a dependency graph |
 | `plan-create-stories` | Turns a PRD into a real backlog in Jira or GitHub |
 
