@@ -19,7 +19,8 @@ This is the reference architecture for a fully-featured AI Second Brain built in
 - Memory vault at `<VaultName>/Memory/` (a local folder of markdown files, Obsidian can be used as a viewer but is optional)
 - **SOUL.md**: Agent personality, behavioral rules, communication style, boundaries
 - **USER.md**: User profile, account IDs, integration config, preferences, team info
-- **MEMORY.md**: Key decisions, lessons learned, active projects, important facts (must stay concise, loaded into every conversation)
+- **MEMORY.md**: The index of an LLM wiki (Andrej Karpathy's pattern). Current state, key decisions, lessons learned, and a one-line link to every page (must stay concise, loaded into every conversation)
+- **Pages**: One markdown page per project, person, meeting or topic, in folders that come from the memory categories. The agent reads the index, opens the page, acts, and writes back. This answers most lookups without a database
 - **BOOTSTRAP.md**: First-run onboarding script, on the user's very first session, this file drives an interactive conversation (asking about name, timezone, role, communication style, integrations, proactivity preferences one question at a time) to personalize USER.md, SOUL.md, and HEARTBEAT.md. Deletes itself after onboarding is complete. If a session ends mid-onboarding, the file persists and picks up where it left off next time.
 - **daily/YYYY-MM-DD.md**: Append-only timestamped logs, everything goes here first
 - **HEARTBEAT.md**: Checklist of what the heartbeat should monitor
@@ -35,6 +36,7 @@ Three lifecycle hooks in `.claude/hooks/`, plus a background summarizer:
 - Configured in `.claude/settings.json`
 
 ### Memory Search (Hybrid RAG)
+The backup to the wiki, for the larger body of notes: daily logs, older pages, and anything the index doesn't point to.
 Pipeline: Markdown files → chunking (~400 tokens, overlapping) → transformers.js, local ONNX (all-MiniLM-L6-v2, 384-dim) → index → hybrid merge (0.7 vector + 0.3 keyword)
 - **SQLite**: sqlite-vec for vectors, FTS5 for keywords
 - **Postgres**: pgvector for vectors, tsvector+GIN for keywords

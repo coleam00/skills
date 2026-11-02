@@ -104,6 +104,7 @@ AlexBrain/Memory/drafts/{active,sent,expired}/
 - **`BOOTSTRAP.md`** drives a one-question-at-a-time conversation on Alex's first session: name, timezone, role, communication style, integrations, proactivity preferences, drafting criteria, active hours, and habit pillars. It writes the answers to `USER.md`, `SOUL.md`, and `HEARTBEAT.md`. If a session ends midway it persists and resumes. It tracks answered questions in a checklist inside the file.
 - **Self-deletion:** when onboarding finishes, the agent sets `status: complete` in the file's frontmatter, and the SessionStart hook removes it with `fs.rmSync` on the next start. The agent cannot delete it directly, because Alex's "Delete anything" boundary blocks `rm` from Phase 8 onward.
 - **`CLAUDE.md`** at the repo root contains the project description, key paths (vault, scripts, hooks, skills, data), conventions (America/New_York timezone, Advisor mode, no secrets in the vault, checkbox syntax, YAML frontmatter, PRD as source of truth), a "Build Commands" section with placeholders, and a "Completed Phases" section.
+- **Structure the vault as an LLM wiki (Andrej Karpathy's pattern).** `MEMORY.md` is the index, loaded every session: current state, decisions, lessons, and a one-line `[[wiki-link]]` to every page. Pages live in the folders that come from Alex's memory categories. The agent reads the index, opens the page, acts, then writes back to the page and its index line. State this recall order in SOUL.md: index first, memory search second. Most lookups end here, with no database involved.
 - `MEMORY.md` loads in every conversation, so keep it concise.
 
 **Dependencies:** None.
@@ -208,6 +209,8 @@ AlexBrain/Memory/drafts/{active,sent,expired}/
 ## Phase 3: Memory Search (Hybrid RAG)
 
 **What to build:** Local hybrid search over the vault: 0.7 vector + 0.3 keyword.
+
+Search is the backup for the larger body of notes: daily logs, older pages, and anything the index doesn't point to. The wiki from Phase 1 answers first.
 
 **Key files:** `.claude/scripts/db.ts`, `embeddings.ts`, `memory-index.ts`, `memory-search.ts`. Data at `.claude/data/memory.db` and `.claude/data/models/`.
 
