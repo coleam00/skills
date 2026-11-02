@@ -139,6 +139,7 @@ For the last two, restart your session (or run `/skills`) and they'll show up.
 | `system-execution-report` | Reflects on a just-finished implementation: what diverged from the plan |
 | `system-evolution-review` | Finds the bugs in your *process*, not your code |
 | `second-brain-audit` | Finds facts in your notes that quietly stopped being true, and restructures so they stop |
+| `second-brain-prd` | Turns a filled-out requirements template into a phased TypeScript build plan for your own AI second brain: memory, hooks, search, integrations, skills, heartbeat, chat, security, deployment |
 
 **Autonomy: hand the whole loop over**
 
