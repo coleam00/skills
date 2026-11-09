@@ -91,6 +91,10 @@ If a scene needs a label to explain itself, the scene is wrong.
 - Leave on the phrase that closes the idea, plus ~0.3 s. A payoff link stays on screen after the return to the face.
 - Shorts: 55-70% of runtime in B-roll, about a third of it FULL; never more than ~12 s without the face; never a face
   gap under ~1.5 s between two B-roll segments (merge them). Long-form: 50-65% graphics counting PIP and SCREEN.
+- **Stacked layout (face in its own band): the graphics band is never empty.** Beats run back to back from 0.0
+  (`tk.band(t, sid)`), and a stretch with nothing new to show holds a topic card (`S.title_card`) rather than going
+  back to the face. The report's `EMPTY BAND` lines (over 2 s) must be gone before rendering; the B-roll share
+  target above does not apply. `references/formats.md`, Stacked layout.
 - **Face beats under 3.5 s between graphics are dropped by the engine** (`MIN_FACE`): the card crosses straight to the
   next graphic. Face pops scheduled in a dropped beat must be deleted.
 - **Cut sweep:** near a picture cut, entering B-roll starts early enough to cover the cut and returning to the face
@@ -142,6 +146,7 @@ and returns HTML; times are output seconds from `tk.at`. Type scales with the bo
 | `S.card`, `S.log`, `S.terminal` | key/value card; typed mono lines; a terminal with prompt, commands and output |
 | `S.file_tree` | a file explorer, files lighting on their words, optional open note |
 | `S.quote`, `S.bignum` | one big statement with its key phrase swept; numbered items |
+| `S.title_card` | a held topic card (kicker, title, rule, optional line on its word): fills the stacked band between beats |
 | `S.image_cta`, `S.link_pill` | a screenshot on a card with a typed URL; a persistent URL above the captions |
 | `M.system_map` | a four-part framework round a centre; `focus=i` flies into one node (section openers) |
 | `M.load_context`, `M.flow_hub`, `M.converge` | files flying into a context window; packets into a hub; chips merging |

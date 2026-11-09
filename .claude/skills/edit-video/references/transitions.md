@@ -7,6 +7,7 @@ edits. Mostly for screen recordings with a face-cam bubble; the same rules apply
 - Where transitions go
 - Pacing at a transition join
 - The face bubble across a wipe
+- Separate face and screen files
 - Wipe speed and style
 - The whoosh
 - Changing the list later
@@ -56,6 +57,34 @@ Set `"bubble": [cx, cy, r]` in config.json (measured on a full-resolution crop) 
 - No push or slide transitions over a baked-in bubble: a push slides a second copy of the face across. The soft wipe
   (`xfade smoothleft`) keeps content in place, and the bubble is overlaid from the untouched cut so it never moves.
 - Mask the bubble out of every frame-difference measurement, or a talking face reads as a scene change.
+
+## Separate face and screen files
+
+A recorder that writes the camera and the screen as separate files per take (`assemble.py --screen`) gets the same
+wipe, applied where it belongs:
+
+```
+transitions.py <ws> detect                     # compares the SCREEN files at every join (lag-shifted)
+transitions.py <ws> room                       # then assemble.py <ws> --no-punch --level --screen <folder> --tag a2
+transitions.py <ws> render --tag a2 > <ws>/transitions_a2.log
+screen_bubble.py <ws> --tag a2 --panel         # uses the wiped cuts, writes cut/transitions_a2.mp4
+wipe_bubbles.py <ws> a2                        # face crop + whole-frame thumbnail across every wipe
+```
+
+- `render` wipes `cut/screen_<tag>.mp4` into `cut/screen_wiped_<tag>.mp4` and writes `cut/face_wiped_<tag>.mp4`: the
+  face cut with the whooshes mixed in and **live, HELD, live** at every join (outgoing face live to the last word,
+  that frame held, the incoming pre-roll live for `--in-pre` before the picture cut), over the whole camera frame.
+  Both are recorded in config.json `"wiped_cuts"`; `screen_bubble.py` uses them when they are newer than the plain
+  cut and prints which it used.
+- **The face switches inside the wipe.** With a baked bubble the face and screen are one picture; with separate files
+  the panel could show the incoming take while the outgoing screen is still whole. `render` clamps the switch into
+  the wipe window, so the panel and the screen change take together. Per-join `"bubble": {"<incoming key>":
+  {"in_pre": 0.2}}` still applies (one test take was still settling its gaze 0.3 s before the cut; 0.2 s was on the lens).
+- `screen_bubble.py` records the panel or bubble box as config.json `"face_box"`, which `wipe_bubbles.py` crops.
+  Read every row: eyes on the lens on both sides, the thumbnail below each crop shows which screen is up.
+- Lower-third cards come from `screen_bubble.py --card` here, not from transitions.json.
+- Most joins in a run of takes over one document are scrolls: plain cuts, even when `detect` scores them as high as
+  the real section change (7.1 vs 7.7 on one set). Decide from the sheet and the words.
 
 ## Wipe speed and style
 

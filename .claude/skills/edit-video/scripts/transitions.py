@@ -21,6 +21,11 @@ render : wipes at those joins on cut/clean_<tag>.mp4 (length and audio untouched
          The bubble switches to the incoming clip AT THE WIPE MIDPOINT, not at the picture cut: between the two it shows
          the incoming clip's real pre-roll (live, facing camera), because the outgoing tail is where the speaker looks
          away to stop the recording (~0.45 s after the last word).
+         Separate face and screen files (assemble.py --screen, no "bubble"): the wipe goes on the SCREEN cut and the
+         face track gets the same live, HELD, live switch over its full frame, with the face switch kept inside the
+         wipe so the panel never shows the incoming take while the outgoing screen is still whole (or the reverse).
+         -> cut/screen_wiped_<tag>.mp4 + cut/face_wiped_<tag>.mp4 (whooshes mixed in), recorded in config.json
+         "wiped_cuts"; screen_bubble.py --tag <tag> picks them up and writes cut/transitions_<tag>.mp4.
          transitions.json may carry "bubble_at_cut": ["<incoming key>", ...] (bubble switches at the picture cut, for a
          clip whose pre-roll still looks at the record button) and "card": {"before": "<segment key>", "text": "...", "secs": 6} (a lower-third
          line before a join, references/transitions.md): white text in a black box, bottom centre, ending as that join's wipe starts.
@@ -128,12 +133,14 @@ def dur(path):
 def render(d, cfg):
     global D
     tag = arg("--tag", "v1"); db = arg("--whoosh-db", -6.4); kind = arg("--kind", "smoothleft"); fps = cfg["fps"]; D = arg("--dur", D)
-    if (cfg.get("screen_cuts") or {}).get(tag) and not cfg.get("bubble"):
-        # separate face and screen files: the wipe belongs on the screen track and the bubble is composed later by
-        # screen_bubble.py, so wiping the face cut here would wipe the wrong picture
-        sys.exit("render works on a screen recording with the bubble baked in (config.json \"bubble\"). For separate face and "
-                 "screen files, transitions are not rendered yet: use plain cuts (screen_bubble.py + export_final.py), or "
-                 "re-record the take that needs a scene change. references/formats.md, Talking head + slides")
+    # separate face and screen files: the wipe belongs on the SCREEN cut, and the face track (composed later by
+    # screen_bubble.py as a bubble or panel) gets the live, HELD, live switch over its whole frame
+    sep = bool((cfg.get("screen_cuts") or {}).get(tag)) and not cfg.get("bubble")
+    W, H = cfg["w"], cfg["h"]
+    if sep:
+        scr = os.path.join(d, cfg["screen_cuts"][tag])
+        if not os.path.exists(scr): sys.exit(f"no screen cut {scr}: run assemble.py <ws> --no-punch --screen <folder> --tag {tag}")
+        print(f"separate face and screen files: wiping {os.path.relpath(scr, d)}, switching the face inside each wipe")
     src = os.path.join(d, "cut", f"clean_{tag}.mp4"); tl = load(d, "cut", f"timeline_{tag}.json")
     segs = {s["key"]: s for s in load(d, "cuts.json")["segments"]}
     joins = set(load(d, "transitions.json")["joins"])
@@ -162,13 +169,17 @@ def render(d, cfg):
         cuts.append(B["out_start"]); cents.append(round(c * fps) / fps)
         o = bub_cfg.get(B["key"], {}); ok = float(o.get("out_keep", OUT_KEEP)); ip = float(o.get("in_pre", IN_PRE))
         sw = B["out_start"] if B["key"] in at_cut else max(B["out_start"] - ip, stop + ok)
+        if sep:   # the face switches while both screens are visible: never the new face over the whole old screen
+            c_ = round(c * fps) / fps; sw = min(max(sw, c_ - D / 2 + 1 / fps), c_ + D / 2 - 1 / fps)
         hold_t = min(stop + ok, sw)   # output time of the outgoing frame to hold until sw
         hold_src = A["v_in"] + (hold_t - A["v_out_start"])
         pre.append((sb["path"], sb["in"], q(sw), B["out_start"], B["key"], q(hold_t), sa["path"], hold_src))
         print(f"  {A['key']} -> {B['key']}: speech {stop:.2f} | {resume:.2f} (pause {resume - stop:.2f}s)  wipe+whoosh @ {c:.2f}"
               + ("   WARN pause < 0.55 s: whoosh will touch speech, widen with room" if resume - stop < 0.55 else ""))
     if not cuts: sys.exit("no transition joins in transitions.json")
-    bounds = [0.0] + cuts + [total]; f = ["[0:v]split=2[base][bub]", f"[base]split={len(bounds) - 1}" + "".join(f"[s{i}]" for i in range(len(bounds) - 1))]
+    n_in = len(pre)
+    head = f"[{2 + 2 * n_in}:v]fps={fps},format=yuv420p[base];[0:v]null[bub]" if sep else "[0:v]split=2[base][bub]"
+    bounds = [0.0] + cuts + [total]; f = [head, f"[base]split={len(bounds) - 1}" + "".join(f"[s{i}]" for i in range(len(bounds) - 1))]
     for i in range(len(bounds) - 1):
         s0, e0 = bounds[i], bounds[i + 1]
         w0 = cents[i - 1] - D / 2 if i > 0 else 0.0; w1 = cents[i] + D / 2 if i < len(cents) else total
@@ -181,7 +192,21 @@ def render(d, cfg):
     for i in range(1, len(bounds) - 1):
         f.append(f"[{last}][p{i}]xfade=transition={kind}:duration={D}:offset={cents[i - 1] - D / 2:.6f}[x{i}]"); last = f"x{i}"
     times = cents
-    if cfg.get("bubble"):
+    if sep:
+        # the wiped screen is one output; the face track (full frame) gets the held frame + incoming pre-roll overlays
+        f.append(f"[{last}]format=yuv420p[vscr]"); f.append(f"[bub]settb=1/{fps * 1000}[fv0]"); cur = "fv0"
+        for j, (p, b_in, c, cut, key, ht, _, _) in enumerate(pre):
+            if c - ht >= 1 / fps:
+                f.append(f"[{2 + n_in + j}:v]scale={W}:{H},setsar=1,trim=end_frame=1,tpad=stop_mode=clone:stop_duration={c - ht + 0.2:.4f},"
+                         f"fps={fps},format=yuv420p,setpts=PTS-STARTPTS+{ht:.6f}/TB[fh{j}]")
+                f.append(f"[{cur}][fh{j}]overlay=0:0:eof_action=pass:enable='between(t,{ht:.4f},{c - 0.5 / fps:.4f})'[foh{j}]"); cur = f"foh{j}"
+            if cut - c >= 1 / fps:
+                f.append(f"[{2 + j}:v]scale={W}:{H},setsar=1,fps={fps},format=yuv420p,setpts=PTS-STARTPTS+{c:.6f}/TB[fp{j}]")
+                f.append(f"[{cur}][fp{j}]overlay=0:0:eof_action=pass:enable='between(t,{c:.4f},{cut - 0.5 / fps:.4f})'[fov{j}]"); cur = f"fov{j}"
+            print(f"  face {key}: outgoing live to {ht:.2f}, held to {c:.2f}, "
+                  + (f"incoming pre-roll {c:.2f} -> cut {cut:.2f}" if cut - c >= 1 / fps else f"incoming from {c:.2f} (cut {cut:.2f})"))
+        f.append(f"[{cur}]format=yuv420p[vcard]")
+    elif cfg.get("bubble"):
         cx, cy, r = cfg["bubble"]; s = 2 * r
         f.append(f"[bub]crop={s}:{s}:{cx - r}:{cy - r},format=yuva420p,geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':"
                  f"a='255*clip(({r}-hypot(X-{r},Y-{r}))/2,0,1)'[bm]")
@@ -201,6 +226,8 @@ def render(d, cfg):
     else:
         f.append(f"[bub]nullsink;[{last}]format=yuv420p[vcard]")
     tj = load(d, "transitions.json"); card = tj.get("card")
+    if card and sep:
+        print("  card: drawn by screen_bubble.py --card for separate files, not here"); card = None
     if card:
         k = [x[4] for x in pre].index(card["before"]); t1 = cents[k] - D / 2; t0 = t1 - float(card.get("secs", 6))
         font = find_font(card.get("font", ""), bold=True)
@@ -229,10 +256,24 @@ def render(d, cfg):
         extra += ["-ss", f"{max(b_in - (cut - c), 0):.4f}", "-t", f"{cut - c + 0.1:.4f}", "-i", p]
     for *_, hp, hs in pre:            # the outgoing frame held across the middle of the pause (inputs 2+n .. 2+2n-1)
         extra += ["-ss", f"{max(hs, 0):.4f}", "-t", "0.1", "-i", hp]
-    r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", src, "-i", wh] + extra + ["-filter_complex", ";".join(f), "-map", "[vout]", "-map", "[aout]",
-                        "-c:v", "libx264", "-crf", "16", "-preset", "medium", "-pix_fmt", "yuv420p", "-r", str(fps),
-                        "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out], capture_output=True, text=True, cwd=d)
+    enc = ["-c:v", "libx264", "-crf", "16", "-preset", "medium", "-pix_fmt", "yuv420p", "-r", str(fps)]
+    if sep:
+        so, fo = os.path.join(d, "cut", f"screen_wiped_{tag}.mp4"), os.path.join(d, "cut", f"face_wiped_{tag}.mp4")
+        outs = ["-map", "[vscr]", "-an", *enc, "-movflags", "+faststart", so,
+                "-map", "[vout]", "-map", "[aout]", *enc, "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", fo]
+        extra += ["-i", scr]
+    else:
+        outs = ["-map", "[vout]", "-map", "[aout]", *enc, "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out]
+    r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", src, "-i", wh] + extra + ["-filter_complex", ";".join(f)] + outs,
+                       capture_output=True, text=True, cwd=d)
     if r.returncode: sys.exit(r.stderr[-2000:])
+    if sep:
+        cfg.setdefault("wiped_cuts", {})[tag] = {"screen": f"cut/screen_wiped_{tag}.mp4", "face": f"cut/face_wiped_{tag}.mp4"}
+        save(cfg, d, "config.json")
+        for t in times: print(f"  wipe @ {int(t // 60)}:{t % 60:05.2f}")
+        print(f"{len(times)} transitions -> {so} + {fo} ({dur(fo):.3f}s, source {total:.3f}s). Next: "
+              f"screen_bubble.py <ws> --tag {tag} [--panel] (uses them, writes cut/transitions_{tag}.mp4), then wipe_bubbles.py <ws> {tag}")
+        return
     for t in times: print(f"  wipe @ {int(t // 60)}:{t % 60:05.2f}")
     print(f"{len(times)} transitions -> {out} ({dur(out):.3f}s, source {total:.3f}s)")
 

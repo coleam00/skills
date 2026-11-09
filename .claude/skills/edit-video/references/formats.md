@@ -71,8 +71,10 @@ setup: full-resolution face, full-resolution slides.
     triggered it, and `--panel` cleared it.
 - `transitions.py detect` compares the SCREEN files at each join (the face files are one set and never change).
   A join that only scrolls the same document is a plain cut, so a run of takes over one document usually has no
-  transition. `transitions.py render` needs the bubble baked into the picture; with separate files it stops with a
-  message, so join with plain cuts.
+  transition. Where the screen really changes (a new page, app or section) at the end of a thought, the wipe works
+  on separate files too: `transitions.py room`, re-assemble with a new tag, `transitions.py render --tag <tag>` (wipes
+  the screen cut, gives the face track the live, HELD, live switch inside each wipe), then `screen_bubble.py --tag
+  <tag> --panel` picks both up. references/transitions.md, Separate face and screen files.
   - **Face + motion graphics:** the normal punch-in cut and a B-roll page, layouts FACE / PIP, SCREEN where the real
     slide or demo is the best picture.
 - Recorded files can drift or end early; check the face file's duration against the screen file's, and read the
@@ -116,6 +118,14 @@ uv run --project $S python $S/init_workspace.py <faces>      # prints "layout st
   lit line marks the seam. Captions sit just above the seam on the graphics side, never on the face. Use SPLIT for
   every beat: `tk.full()` works but hides the face, which is the point of the layout. `tk.pip()` / `tk.screen()` raise
   (the face already has its band; the screen half is usually a script view).
+- **The graphics band is always occupied.** With the face parked in its band, a FACE beat leaves the other band as
+  plain background, and in a vertical frame an empty band reads as unfinished (one test Short sat empty at 0-5 s,
+  19-22 s and 48-57 s). Run beats back to back with `tk.band(t, sid)` (enters SPLIT or swaps the scene), start the
+  first beat at 0.0, and where nothing new is said hold a topic card instead of calling `tk.face()`:
+  `S.title_card(tk, sid, tk.page_box, "<section title>", t, kicker=..., sub=..., t_sub=tk.at(...))`, words from
+  what is being said. The build report prints `EMPTY BAND a-b` for every stretch over 2 s without a beat, or
+  `band occupied`; on the render, `empty_card.py <video> --ws <ws> --min 2` measures the band itself (it also
+  catches a scene that swaps in long before its first element lands). The 55-70% B-roll target does not apply: the face is on screen the whole time, so ~100% is right.
 - FACE beats grow the band to full frame only when that is an upscale of at most 1.2x (config.json `"layout"`
   `"max_upscale"`), i.e. when the band is nearly the canvas. For a 1080x782 band (2.46x) the band stays.
 - The build report prints the geometry and the largest upscale: band scale x the largest take punch-in (the alternating

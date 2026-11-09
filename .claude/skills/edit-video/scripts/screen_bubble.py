@@ -4,6 +4,9 @@ Usage: uv run --project $S python screen_bubble.py <ws> --tag a1 [--inset 0.76] 
 Needs `assemble.py <ws> --no-punch --screen ... --tag <tag>` first (a punch-in would change the bubble's framing at
 every cut). Writes <ws>/cut/transitions_<tag>.mp4, so `export_final.py <ws> <tag> <dest> <Name>` finishes it
 (hold + fade, -14 LUFS, sync check, .srt).
+With scene-change wipes: run `transitions.py <ws> render --tag <tag>` first; this script then uses its wiped screen
+cut and its face cut (live, HELD, live at each wipe) instead of the plain ones, and records the face box in
+config.json "face_box" for `wipe_bubbles.py`.
 
 - Bubble: the engine's geometry (r = 11.5% of the width, 2.2% margin, head and shoulders from faces.json), the same
   4 px light-blue ring and shadow as PIP/SCREEN in the B-roll page, so both versions of a video match.
@@ -23,7 +26,7 @@ import json, os, statistics, subprocess, sys
 from PIL import Image, ImageDraw, ImageFilter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import find_font, load, nvenc_ok, p, run, ws
+from common import find_font, load, nvenc_ok, p, run, save, ws
 
 SS = 4   # supersampling for the antialiased mask and ring
 
@@ -58,6 +61,12 @@ def main():
     tl = load(d, "cut", f"timeline_{tag}.json"); faces = load(d, "faces.json") or {}
     scr = (cfg.get("screen_cuts") or {}).get(tag)
     if not scr: sys.exit(f"no screen cut for {tag}: run assemble.py <ws> --no-punch --screen <folder> --tag {tag}")
+    # transitions.py render (separate files) leaves a wiped screen cut and a face cut with the live, HELD, live switch
+    face_in = f"cut/clean_{tag}.mp4"; wc = (cfg.get("wiped_cuts") or {}).get(tag)
+    if wc and all(os.path.exists(p(d, x)) for x in wc.values()):
+        if min(os.path.getmtime(p(d, x)) for x in wc.values()) >= os.path.getmtime(p(d, face_in)):
+            scr, face_in = wc["screen"], wc["face"]; print(f"using the transitions render: {scr} + {face_in}")
+        else: print(f"WARN {wc['face']} is older than {face_in}: re-run transitions.py <ws> render --tag {tag}; using plain cuts")
     if any(abs(s.get("zoom", 1) - 1) > 1e-3 for s in tl): print("WARN this cut has punch-ins; the bubble framing will jump at cuts (use --no-punch)")
     # bubble: same numbers as engine.Track._bubble_geometry, from the median face of the clips that have a screen file
     own = [s for s in tl if not s["clip"].startswith("m")]
@@ -96,6 +105,7 @@ def main():
     ring = Image.alpha_composite(ring, sh)
     shape(ImageDraw.Draw(ring), ((pad - 4) * SS, (pad - 4) * SS, (pad + fw + 4) * SS, (pad + fh + 4) * SS), outline=(96, 165, 250, 217), width=(3 if panel else 4) * SS)
     ring.resize((RW, RH), Image.LANCZOS).save(p(d, "cut", "_bubble_ring.png"))
+    cfg.setdefault("face_box", {})[tag] = [int(fx), int(fy), int(fw), int(fh)]; save(cfg, d, "config.json")   # wipe_bubbles.py crops it
     r = fw / 2; cx = fx + r                                         # the card text centres left of the face (below)
     # the bubble hides over segments that have no screen file of their own (an inserted segment): a hard cut, like the picture
     hide = [(s["v_out_start"], s["v_out_end"]) for s in tl if s["clip"].startswith("m")]
@@ -146,7 +156,7 @@ def main():
     out = p(d, "cut", f"transitions_{tag}.mp4")
     cwd = os.getcwd(); os.chdir(d)
     try:
-        run(["ffmpeg", "-v", "error", "-y", "-i", scr, "-i", f"cut/clean_{tag}.mp4", "-loop", "1", "-i", "cut/_bubble_mask.png",
+        run(["ffmpeg", "-v", "error", "-y", "-i", scr, "-i", face_in, "-loop", "1", "-i", "cut/_bubble_mask.png",
              "-loop", "1", "-i", "cut/_bubble_ring.png", *extra, "-filter_complex", ";".join(f), "-map", "[vout]", "-map", "1:a",
              "-shortest", *(["-t", arg(args, "--secs")] if "--secs" in args else []), *(["-c:v", "h264_nvenc", "-preset", "p6", "-rc", "vbr", "-cq", "15", "-b:v", "0"] if nvenc() else ["-c:v", "libx264", "-crf", "16", "-preset", "medium"]), "-r", str(fps), "-pix_fmt", "yuv420p", "-c:a", "copy",
              "-movflags", "+faststart", out])

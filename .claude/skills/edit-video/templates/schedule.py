@@ -10,6 +10,8 @@ Rules of thumb (references/captions-and-broll.md has the full list):
   never a face gap shorter than ~1.5 s between two B-roll segments (merge them instead).
 - Long-form talk (10+ min, 16:9): 50-65% graphics counting PIP/SCREEN, which keep the face on as a bubble; FULL
   stays short (the report flags any FULL over 12 s). references/captions-and-broll.md.
+- Stacked layout (face in its own band): the graphics band is never empty. Chain beats with tk.band(t, sid) from
+  0.0 and hold S.title_card where nothing new is said; the report flags EMPTY BAND over 2 s.
 - One idea per scene. If a scene needs more than ~6 labels, split it or cut words.
 """
 import os, sys

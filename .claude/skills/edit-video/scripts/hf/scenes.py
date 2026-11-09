@@ -495,6 +495,29 @@ def quote(tk, sid, box, text, key, t, t_key=None, sub=None, t_sub=None):
         ts = t_sub if t_sub is not None else t + 1.2; rule(tk, f"#{sid}u", ts - 0.2); rise(tk, f"#{sid}s", ts, 0.4); yy += round(30 * u) + round(38 * u) * 1.3
     return _scene(sid, "".join(out), tk, box, yy - y)
 
+def title_card(tk, sid, box, title, t0, kicker=None, sub=None, t_sub=None):
+    """A held topic card: an optional small kicker, the section title, an accent rule, an optional quiet line. For the
+    stacked layout's graphics band while no other beat is up (an empty band reads as unfinished in a vertical frame).
+    Everything but `sub` lands at t0, so it can sit for several seconds without a cue; `sub` lands on its own word."""
+    x, y, w, h = box; u = unit(box); t_ = tk.T; out = []; yy = y
+    if kicker:
+        fk = round(46 * u)
+        out.append(f'<div class="a mono" id="{sid}c" style="left:{x}px;top:{yy}px;width:{w}px;font-size:{fk}px;color:{t_["accent_light"]};'
+                   f'letter-spacing:.08em;text-transform:uppercase">{kicker}</div>')
+        rise(tk, f"#{sid}c", t0, 0.4); yy += round(fk * 1.9)
+    fs = round(104 * u)
+    while fs > 40 and max(1, math.ceil(est_w(title, fs) / w)) * fs * 1.12 > h * 0.6: fs = round(fs * 0.94)
+    out.append(f'<div class="a hd" id="{sid}t" style="left:{x}px;top:{yy}px;width:{w}px;font-size:{fs}px">{title}</div>')
+    reveal(tk, f"#{sid}t", t0 + 0.05, 0.6); yy += fs * 1.12 * max(1, math.ceil(est_w(title, fs) / w)) + round(36 * u)
+    out.append(f'<div class="rule" id="{sid}u" style="left:{x}px;top:{yy:.0f}px;width:{round(110 * u)}px;height:6px;background:{t_["accent"]}"></div>')
+    rule(tk, f"#{sid}u", t0 + 0.35); yy += round(40 * u)
+    if sub:
+        fsub = round(54 * u)
+        out.append(f'<div class="a sub" id="{sid}s" style="left:{x}px;top:{yy:.0f}px;width:{w}px;font-size:{fsub}px;color:{t_["ink2"]}">{sub}</div>')
+        rise(tk, f"#{sid}s", t_sub if t_sub is not None else t0 + 0.6, 0.4)
+        yy += fsub * 1.15 * max(1, math.ceil(est_w(sub, fsub) / w))
+    return _scene(sid, "".join(out), tk, box, yy - y)
+
 def stats(tk, sid, box, items, t0, mark_i=None, t_mark=None):
     """One to three big figures side by side, each with a short label under it, landing on the word that says the
     number. Optional hand circle on one of them (the surprising one). items: [(value, label, t)]. Only figures the

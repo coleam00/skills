@@ -33,6 +33,7 @@ BUB_FADE = 0.22     # bubble fade when it leaves for a layout that hides the fac
 MIN_FACE = 3.5      # a face beat shorter than this between two graphics is dropped: the graphic crosses to the next one.
                     # Graphic -> face -> graphic inside 2-3 s read as jumping back and forth in review
 FOLLOW_EVERY = 1.5  # the panel re-centres on the face this often while it is up (cut/facetrack_<tag>.json)
+EMPTY_BAND = 2.0    # stacked layout: the graphics band empty (no beat up) longer than this is flagged; it reads as unfinished
 FOLLOW_MIN = 10     # ... but only when the face has moved more than this many cut pixels
 
 class Track:
@@ -534,6 +535,13 @@ class Track:
             if self.mode == "PIP": self.add(f"tl.set('#full .scene',{{opacity:0}},{t + d + 0.02:.3f});")
         self.segments.append((self.mode, self.seg_start, t)); self.shown.append((None, t)); self.mode = "FACE"; self.face_since = t; self.ready = 0.0; return t
 
+    def band(self, t, scene):
+        """Stacked layout: put `scene` in the graphics band, entering SPLIT if no beat is up, else swapping the scene.
+        The band is never left empty: between beats hold a topic card (scenes.title_card) instead of calling face().
+        Returns the start time; build the scene from it."""
+        if self.mode != "SPLIT" or self._pending_face is not None: t = self.split(t)
+        self.pscene(t, scene); return t
+
     def pscene(self, t, scene, fade=0.25):
         """Swap the scene shown in the SPLIT graphics area."""
         self.add(f"tl.to('#page .scene',{{opacity:0,duration:{fade},ease:'power1.in'}},{t:.3f}); tl.set('#{scene}',{{opacity:1}},{t + fade:.3f});"); self.shown.append((scene, t))
@@ -584,6 +592,17 @@ class Track:
             print(f"   graphics page_box {self.page_box}, captions y={G['cap_top']}..{G['cap_top'] + G['cap_h']}, seam y={G['seam']}; FACE beats "
                   + (f"grow the face to full frame ({G['cover']:.2f}x)" if G["expand"] else f"keep the band (full frame would need {G['cover']:.2f}x)"))
             if up > 1.2: print("   UPSCALE: the face is scaled over 1.2x; record the camera band at the canvas width or pass --no-punch")
+        if self.G and not self.G["expand"]:
+            # a FACE beat in the stacked layout leaves the graphics band as plain background: in a vertical frame
+            # that reads as unfinished. Flag every stretch with no beat up over EMPTY_BAND seconds.
+            occ = sorted((a, b) for m, a, b in self.segments if m in ("SPLIT", "FULL")); t0 = 0.0; gaps = []
+            for a, b in occ + [(self.D, self.D)]:
+                if a - t0 > EMPTY_BAND: gaps.append((t0, a))
+                t0 = max(t0, b)
+            for a, b in gaps:
+                print(f"   EMPTY BAND {a:6.2f}-{b:6.2f} ({b - a:4.1f}s): the graphics band is plain background; run a beat "
+                      f"through it or hold a topic card (tk.band(t, sid) + scenes.title_card)")
+            if not gaps: print(f"   band occupied: no stretch over {EMPTY_BAND:.0f}s without a beat")
         if self.G and self.page_box[3] < self.H * 0.3:
             print(f"   SMALL SPLIT PAGE: the stacked graphics band is {self.page_box[3]}px; the camera band leaves too little room")
         elif self.vertical and any(m == "SPLIT" for m, _, _ in self.segments) and self.page_box[3] < self.H * 0.35:

@@ -32,9 +32,9 @@ Decide from what the user gave and said. If it is not clear, ask one question.
 |---|---|---|
 | **Clean talking-head cut** (one take or many, no graphics) | 1-5, 9 | `references/cutting.md` |
 | **Screen recording + face bubble**, stitched with scene-change transitions | 1-6, 9 (`--no-punch`) | `references/transitions.md` |
-| **Separate face and screen files per take** (face panel or bubble over the screen) | 1-5 (`--no-punch --screen <folder>`), `transitions.py detect`, `screen_bubble.py`, 9 (`export_final.py`) | `references/formats.md`, Talking head + slides |
+| **Separate face and screen files per take** (face panel or bubble over the screen) | 1-5 (`--no-punch --screen <folder>`), 6 (wipes on the screen, if it changes scene), `screen_bubble.py`, 9 (`export_final.py`) | `references/formats.md`, Talking head + slides; `references/transitions.md`, Separate face and screen files |
 | **Vertical Short** with captions, optional B-roll | 1-5, 7, 8, 9 | `references/captions-and-broll.md`, `references/formats.md` |
-| **Vertical Short from a stacked canvas** (screen/script on top, camera band below) | `split_wide.py`, then 1-5, 7, 8 (SPLIT beats), 9 | `references/formats.md`, Stacked layout |
+| **Vertical Short from a stacked canvas** (screen/script on top, camera band below) | `split_wide.py`, then 1-5, 7, 8 (contiguous SPLIT beats, the band never empty), 9 | `references/formats.md`, Stacked layout |
 | **Long-form with motion-graphics B-roll** (16:9 talk, course, workshop) | 1-5, 7, 8, 9, one section first | `references/formats.md`, `references/captions-and-broll.md` |
 | **Inserting a finished segment** (ad read, intro) into any of the above | after step 2: `insert_segment.py` | `references/cutting.md`, Inserts |
 
@@ -129,6 +129,8 @@ uv run --project $S python $S/transitions.py <ws> render --tag v2 > <ws>/transit
 uv run --project $S python $S/wipe_bubbles.py <ws> v2         # bubble crops across every wipe
 ```
 
+Separate face and screen files: `render` writes a wiped screen cut and a face cut (live, HELD, live, the switch kept
+inside the wipe); run `screen_bubble.py <ws> --tag v2 [--panel]` after it and before `wipe_bubbles.py`.
 The agent decides the joins from the contact sheet, not the threshold: only where the scene changes AND a thought
 ends. **Pass:** every remaining join is a real scene change at a sentence end; every row of the wipe-bubble sheet
 has eyes on the lens.
@@ -152,7 +154,8 @@ uv run --project $S python $S/review.py <ws>/hf/broll/out/broll_draft.mp4 <ws>/c
 ```
 
 Anchor every element to a spoken phrase (`tk.at("...")`), never typed seconds. Long-form: render one section first.
-**Pass:** lint 0 errors, inspect clean, 0 `SHORT DWELL`, every beat grid read: each graphic matches its words, lands
+**Pass:** lint 0 errors, inspect clean, 0 `SHORT DWELL`, 0 `EMPTY BAND` (stacked layout: the graphics band always
+holds a beat or a topic card; the report, then `empty_card.py <render> --ws <ws> --min 2`), every beat grid read: each graphic matches its words, lands
 on its word, nothing clipped or overlapping, the face never covered or flashed at a cut.
 
 ## 9. Finalize and verify the exported file
