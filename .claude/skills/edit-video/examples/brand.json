@@ -1,0 +1,15 @@
+{
+  "bg": "#0B0E14",
+  "surface": "#141A26",
+  "ink": "#F4F6FA",
+  "ink2": "#98A2B3",
+  "accent": "#4C8DF6",
+  "accent_light": "#8AB6FF",
+  "accent_deep": "#1F3B70",
+  "marker": "rgba(76,141,246,.55)",
+  "bad": "#F87171",
+  "font": "Inter",
+  "mono": "JetBrains Mono",
+  "caption_ink": "#F4F6FA",
+  "caption_active": "#8AB6FF"
+}
