@@ -65,8 +65,32 @@ and clicks fired a second late. `scripts/page_render.py` renders instead:
 - **Preview first:** `PREVIEW="t1,t2,..."` renders only those frames as PNGs in `./preview`. Review every camera
   key's start, middle and end there; a framing fix costs minutes, not an hour.
 
-Run a build script from the workspace: `uv run --with playwright --with pillow python -I build.py` (install the
-browser once with `uv run --with playwright playwright install chromium`).
+Run a build script from the workspace: `uv run --with playwright --with pillow python -I build.py $S` (install the
+browser once with `uv run --with playwright playwright install chromium`). `-I` drops the script's own folder from
+the import path, so the build script adds the skill's scripts folder itself. A complete build script (a local file
+works as well as a URL: `Path("page.html").resolve().as_uri()`):
+
+```python
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])                          # $S, the skill's scripts folder
+from playwright.sync_api import sync_playwright
+from page_render import Site, Cam, Writer, render, act
+
+with sync_playwright() as p:
+    b = p.chromium.launch()
+    s = Site(b, "https://example.com/page", dsf=2)        # dsf=2 only if a shot zooms
+    y1 = s.top("Pricing") - 80                             # page y of a heading, minus some headroom
+    w = Writer(Path("screen_a.mkv"))                        # 1920x1080, 60 fps
+    render(w, s, 0.0, 4.0,
+           Cam([(0.0, 0, (960, 540, 1)), (1.0, 0, (960, 540, 1)),      # hold, then scroll 1.0-2.2 s
+                (2.2, y1, (960, 540, 1)), (3.0, y1, (960, 540, 1)),
+                (3.8, y1, (700, 300, 1.5))]),                          # push in 1.5x
+           [(2.4, act("open plans", lambda: s.click("Show the plans")))])
+    w.close(); b.close()
+```
+
+`render()` times are seconds on the screen track you are building; place them from the cut's word times.
 
 ## 4. Moves that work
 

@@ -54,8 +54,17 @@ def frame(path, t, w=192, h=108):
 
 def detect(d, cfg):
     segs = load(d, "cuts.json")["segments"]; thr = arg("--threshold", 6.0); m = bubble_mask(cfg, 192, 108); joins = []; every = []
+    # separate face and screen files (assemble.py --screen): the scene is the SCREEN, so compare the screen files at the
+    # same trims, shifted by each pair's measured lag. Comparing the face files measured a talking head on one set.
+    def pic(s, t):
+        if cfg.get("screen_cuts"):
+            from assemble import screen_path
+            sp = screen_path(s["path"], cfg.get("screen_from"))
+            if sp: return sp, t - cfg.get("screen_lags", {}).get(os.path.basename(sp), 0.0)
+        return s["path"], t
+    if cfg.get("screen_cuts"): print("comparing the screen files (assemble.py --screen), not the face files")
     for a, b in zip(segs, segs[1:]):
-        diff = float(np.abs(frame(a["path"], a["out"] - 1 / cfg["fps"]) - frame(b["path"], b["in"]))[m].mean())
+        diff = float(np.abs(frame(*pic(a, a["out"] - 1 / cfg["fps"])) - frame(*pic(b, b["in"])))[m].mean())
         on = diff >= thr; every.append((a, b, diff, on))
         if on: joins.append((a, b, diff))
         ins = "  insert join: a transition only if the insert looks different, else a clean cut" if (a["clip"].startswith("m") or b["clip"].startswith("m")) else ""
@@ -71,7 +80,7 @@ def detect(d, cfg):
     if every:
         sheet = Image.new("RGB", (960, 270 * len(every)), "black"); dr = ImageDraw.Draw(sheet)
         for i, (a, b, diff, on) in enumerate(every):
-            sheet.paste(rgb(a["path"], a["out"] - 1 / cfg["fps"]), (0, 270 * i)); sheet.paste(rgb(b["path"], b["in"]), (480, 270 * i))
+            sheet.paste(rgb(*pic(a, a["out"] - 1 / cfg["fps"])), (0, 270 * i)); sheet.paste(rgb(*pic(b, b["in"])), (480, 270 * i))
             dr.text((6, 270 * i + 6), f"{a['key']} -> {b['key']}  diff {diff:.1f}{'  CANDIDATE' if on else ''}", fill=(255, 230, 0))
         os.makedirs(os.path.join(d, "check"), exist_ok=True); sheet.save(os.path.join(d, "check", "transition_joins.png"))
     print(f"{len(joins)} candidates -> transitions.json. READ check/transition_joins.png (every join, candidates marked) "
@@ -119,6 +128,12 @@ def dur(path):
 def render(d, cfg):
     global D
     tag = arg("--tag", "v1"); db = arg("--whoosh-db", -6.4); kind = arg("--kind", "smoothleft"); fps = cfg["fps"]; D = arg("--dur", D)
+    if (cfg.get("screen_cuts") or {}).get(tag) and not cfg.get("bubble"):
+        # separate face and screen files: the wipe belongs on the screen track and the bubble is composed later by
+        # screen_bubble.py, so wiping the face cut here would wipe the wrong picture
+        sys.exit("render works on a screen recording with the bubble baked in (config.json \"bubble\"). For separate face and "
+                 "screen files, transitions are not rendered yet: use plain cuts (screen_bubble.py + export_final.py), or "
+                 "re-record the take that needs a scene change. references/formats.md, Talking head + slides")
     src = os.path.join(d, "cut", f"clean_{tag}.mp4"); tl = load(d, "cut", f"timeline_{tag}.json")
     segs = {s["key"]: s for s in load(d, "cuts.json")["segments"]}
     joins = set(load(d, "transitions.json")["joins"])

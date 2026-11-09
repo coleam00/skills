@@ -81,6 +81,7 @@ def cut_screen(d, cfg, tl, tag, args):
     W, H, fps = cfg["w"], cfg["h"], cfg["fps"]; i = args.index("--screen")
     val = args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("--") else None
     lags = cfg.setdefault("screen_lags", {})
+    if val: cfg["screen_from"] = os.path.abspath(val)      # transitions.py detect compares these screen files, not the faces
     srcs, fv = [], []
     for s in tl:
         sp = screen_path(s["path"], val) or s["path"]
@@ -164,7 +165,13 @@ def main():
                                 "-map", "0:a:0", "-af", "ebur128", "-f", "null", "-"], capture_output=True, text=True).stderr
             v = re.findall(r"I:\s+(-?[\d.]+) LUFS", r); meas.append(float(v[-1]) if v and s["a_out"] - s["a_in"] >= 3 else None)
         ref = statistics.median([m for m in meas if m is not None])
-        gains = [0.0 if m is None else max(-14.0, min(14.0, ref - m)) for m in meas]
+        gains = [None if m is None else max(-14.0, min(14.0, ref - m)) for m in meas]
+        # a segment too short to measure (a spliced remainder: c02_s01b) takes its own clip's gain, or the splice
+        # stepped the level by up to a dB mid-sentence (one take, two gains)
+        for i, s in enumerate(tl):
+            if gains[i] is None:
+                sib = [g for t_, g in zip(tl, gains) if t_["clip"] == s["clip"] and g is not None]
+                gains[i] = statistics.median(sib) if sib else 0.0
         for s, m, g in zip(tl, meas, gains): print(f"  level {s['key']:9} {m if m is not None else 'n/a':>6} LUFS  gain {g:+.1f} dB")
     for s, g in zip(tl, gains): s["gain_db"] = round(g, 2)
     inputs, fv, fa = [], [], []

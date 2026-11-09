@@ -16,15 +16,17 @@ Writes, next to the source unless --out-dir:
                       bubble covered the right-hand cards on 16 of 19 slides; --inset 0.8 --bubble 0.17 cleared them).
 Stacked canvas (taller than wide, e.g. a 1080x1920 vertical canvas with the screen on top and the camera below):
 detected automatically, --face-side top|bottom (default bottom). The seam between the two is found as the strongest
-horizontal edge in the middle half of the frame and printed; --split-at Y overrides it. The face half is not 9:16, so pass
---reframe 1080x1920 to crop it to that aspect around the measured face and scale it up: the pipeline then sees an
-ordinary vertical talking head (softer than native: a 1080x780 camera region is upscaled ~2.5x). --backup is side-by-side
-only. Run it per clip; --screen-dir keeps the screen files out of the clip folder (init_workspace.py treats every
+horizontal edge in the middle half of the frame and printed; --split-at Y overrides it. By default the face file is the
+camera band at native size and layout.json is written next to it ({"mode": "stacked", "w", "h", "face_side", "seam"}):
+init_workspace.py copies it into config.json and the B-roll engine keeps the face in its band, graphics on the other
+side of the seam (references/formats.md, Stacked layout). --reframe 1080x1920 instead crops the band to that aspect
+around the measured face and scales it up into an ordinary vertical talking head (a 1080x780 band is upscaled ~2.5x,
+visibly soft; only when the layout cannot be used). --backup is side-by-side only. Run it per clip; --screen-dir keeps the screen files out of the clip folder (init_workspace.py treats every
 video in a folder as a clip).
 One decode feeds all outputs; h264_nvenc when a GPU encoder works, else libx264. ~3x real time with NVENC.
 Never touches the source.
 """
-import os, subprocess, sys
+import json, os, subprocess, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import nvenc_ok, probe, run
@@ -135,6 +137,14 @@ def main():
         outs += ["-map", "[bo]", "-map", "0:a:0?", *v, "-c:a", "aac", "-b:a", "320k", "-movflags", "+faststart", backup]
     run(["ffmpeg", "-v", "error", "-y", *inputs, "-filter_complex", ";".join(fc), *outs])
     for f in tmp: os.remove(f)
+    if stacked and "--reframe" not in a:                          # the stacked layout: native band + where it sits
+        lay = {"mode": "stacked", "w": W, "h": H, "face_side": side, "seam": cut}
+        lp = os.path.join(out_dir, "layout.json")
+        if os.path.exists(lp):
+            old = json.load(open(lp, encoding="utf-8"))
+            if old != lay: print(f"WARN layout.json differs from an earlier clip ({old}): the recorder scene changed between takes")
+        json.dump(lay, open(lp, "w", encoding="utf-8"), indent=1)
+        print(f"layout {lp}: camera band {rw}x{rh} at native size, {side} of a {W}x{H} canvas")
     print("face  ", face); print("screen", screen)
     if "--backup" in a: print("backup", backup, f"(bubble {D}px at {bx},{by}; face crop {side_px}px around {cx:.0f},{cy:.0f})")
     print(f"next: init_workspace.py \"{face}\" (one recording) or \"{out_dir}\" (after splitting every clip into it); "

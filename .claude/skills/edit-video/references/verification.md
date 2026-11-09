@@ -18,7 +18,7 @@ stage is done only when the evidence has been produced AND read. "The script exi
 | Evidence | Answers | Tool |
 |---|---|---|
 | Frame grids | does it look right at this moment? | `review.py`, `eye_strip.py`, `validate_cut.py` (joins sheet), `transitions.py detect` sheet |
-| Word diffs | was anything lost, doubled or clipped? | `validate_cut.py`, a re-transcription of any window |
+| Word diffs | was anything lost, doubled or clipped? | `validate_cut.py`, `retranscribe.py` (any window) |
 | Crops | is the small thing right (a bubble's eyes, a caption edge)? | `wipe_bubbles.py`, `ffmpeg -vf crop=...` |
 | Numbers | is the timing, level or sync right? | join table, LUFS, sync lags, `align.py`, `empty_card.py`, `flicker_check.py` |
 
@@ -43,6 +43,17 @@ Motion feel and sound quality are not on this list. Say so in the report; they a
 - A clean diff does NOT prove a word is whole: Whisper completes a word from its first half. That is why
   `TAIL ON SOUND` and `align.py` exist. Never override a waveform finding with a transcript.
 - Before splicing out a "repeat", re-transcribe the raw window with no prompt: Whisper invents doubles.
+- Settle every DIFF line the same way, on the raw clip AND on the cut: a word the raw clip says too is an ASR variant
+  of the source transcript, not an edit error.
+
+```
+uv run --project $S python $S/retranscribe.py <ws> c03 16 21.6 --no-prompt    # a clip, seconds in the clip
+uv run --project $S python $S/retranscribe.py <ws> cut:v1 52 57.2             # the cut, output timeline
+uv run --project $S python $S/retranscribe.py <any file> 10 14                # an export, an insert, a raw file
+```
+
+  It pads 1 s of silence before the window (a first-frame word is otherwise misheard) and prints each word with its
+  time and probability. The times are a second check, never cut points.
 
 ## Crops
 

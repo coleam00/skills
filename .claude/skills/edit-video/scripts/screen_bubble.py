@@ -33,6 +33,25 @@ def nvenc():
 
 def arg(args, k, d=None): return args[args.index(k) + 1] if k in args else d
 
+def covered(d, scr, x, y, w, h, W, H, n=8):
+    """Warn when the bubble would sit on screen content: the share of sharp-edged pixels (text, UI lines) inside its
+    box, sampled over the screen cut. A document column or a full-width deck under a corner bubble was only caught by
+    reading the frames; this says so before the render."""
+    import cv2, numpy as np
+    cap = cv2.VideoCapture(os.path.join(d, scr)); N = cap.get(cv2.CAP_PROP_FRAME_COUNT); worst = 0.0
+    for k in range(n):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(N * (k + 0.5) / n)); ok, f = cap.read()
+        if not ok: continue
+        f = cv2.resize(f, (W, H)); g = cv2.cvtColor(f[int(y):int(y + h), int(x):int(x + w)], cv2.COLOR_BGR2GRAY)
+        e = cv2.Canny(g, 80, 200) > 0; gh, gw = e.shape
+        # share of an 8x8 grid of cells holding edges: a few lines of small text fill few pixels but many cells
+        cells = [e[i * gh // 8:(i + 1) * gh // 8, j * gw // 8:(j + 1) * gw // 8].mean() > 0.01 for i in range(8) for j in range(8)]
+        worst = max(worst, sum(cells) / 64)
+    if worst > 0.12:
+        print(f"WARN the face covers screen content: {worst:.0%} of its box holds text or UI edges in some frames. Read "
+              f"the frames; use --panel or --inset 0.75 if text sits under it")
+    return worst
+
 def main():
     d, cfg = ws(); args = sys.argv
     tag = arg(args, "--tag", "a1"); W, H, fps = cfg["w"], cfg["h"], cfg["fps"]
@@ -64,6 +83,7 @@ def main():
     if inset:   # the slide card: left margin = face margin, vertically centred, must end left of the face
         cw_, ch_ = round(W * inset / 2) * 2, round(H * inset / 2) * 2; x0, y0 = m, (H - ch_) // 2
         if x0 + cw_ > fx - 4: sys.exit(f"--inset {inset} is too wide: the card ends at {x0 + cw_}, the face starts at {fx}")
+    if not inset: covered(d, scr, fx, fy, fw, fh, W, H)
     pad = 40
     shape = (lambda dr, box, **k: dr.rounded_rectangle(box, SH * SS, **k)) if panel else (lambda dr, box, **k: dr.ellipse(box, **k))
     mask = Image.new("L", (fw * SS, fh * SS), 0); shape(ImageDraw.Draw(mask), (0, 0, fw * SS - 1, fh * SS - 1), fill=255)

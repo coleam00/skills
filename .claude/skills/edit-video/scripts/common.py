@@ -110,6 +110,30 @@ def ws(argv=None):
     cfg = json.load(open(os.path.join(d, "config.json"), encoding="utf-8"))
     return d, cfg
 
+MAX_EXPAND = 1.2    # stacked layout: the face band may grow to full frame only if that upscales it by no more than this
+
+def stacked(cfg):
+    """Geometry of the stacked layout (config.json "layout": {"mode": "stacked", "w": 1080, "h": 1920,
+    "face_side": "bottom"}), or None for an ordinary full-frame cut. The cut (cfg w x h) is the camera band at native
+    size; the output canvas is layout w x h. The band sits at the bottom (or top), graphics fill the rest, captions
+    sit on the graphics side of the seam so they never cover the face. split_wide.py writes the layout block."""
+    L = cfg.get("layout")
+    if not (isinstance(L, dict) and L.get("mode") == "stacked"): return None
+    W, H = int(L.get("w", 1080)), int(L.get("h", 1920)); fw, fh = cfg["w"], cfg["h"]
+    s = W / fw; bh = round(fh * s); side = L.get("face_side", "bottom")
+    if bh >= H: raise ValueError(f"stacked layout: the camera band ({fw}x{fh}, {bh}px tall at {W} wide) leaves no room in {W}x{H}")
+    band_y = H - bh if side == "bottom" else 0; seam = band_y if side == "bottom" else bh
+    cap_h, gap = 130, 26
+    cap_top = seam - gap - cap_h if side == "bottom" else seam + gap
+    cover = max(W / fw, H / fh)
+    return {"W": W, "H": H, "fw": fw, "fh": fh, "s": s, "bh": bh, "band_y": band_y, "seam": seam, "side": side,
+            "cap_top": cap_top, "cap_h": cap_h, "cover": cover, "expand": cover <= L.get("max_upscale", MAX_EXPAND)}
+
+def canvas(cfg):
+    """(W, H) of the output picture: the cut's size, or the stacked layout's canvas."""
+    G = stacked(cfg)
+    return (G["W"], G["H"]) if G else (cfg["w"], cfg["h"])
+
 def p(d, *parts):
     path = os.path.join(d, *parts); os.makedirs(os.path.dirname(path), exist_ok=True); return path
 

@@ -37,9 +37,13 @@ def main():
     cfg = {"source": src, "mode": "clips" if len(clips) > 1 else "single", "w": w, "h": h, "fps": fps,
            "orientation": "vertical" if h > w else "horizontal",
            "clips": [{"key": f"c{k + 1:02d}", "path": c, "dur": round(i["dur"], 3), "audio": i["audio"]} for k, (c, i) in enumerate(zip(clips, infos))]}
+    # split_wide.py leaves layout.json beside stacked face files: the cut is the camera band, the output a taller canvas
+    lj = os.path.join(src if os.path.isdir(src) else os.path.dirname(src), "layout.json")
+    if os.path.exists(lj):
+        cfg["layout"] = json.load(open(lj, encoding="utf-8")); cfg["orientation"] = "vertical" if cfg["layout"]["h"] > cfg["layout"]["w"] else "horizontal"
     prev = os.path.join(out, "config.json")
     if os.path.exists(prev):  # keep any decisions already recorded (deliverables, brand, script)
-        old = json.load(open(prev, encoding="utf-8")); cfg = {**old, **{k: cfg[k] for k in ("source", "mode", "w", "h", "fps", "orientation", "clips")}}
+        old = json.load(open(prev, encoding="utf-8")); cfg = {**old, **{k: cfg[k] for k in ("source", "mode", "w", "h", "fps", "orientation", "clips", "layout") if k in cfg}}
     save(cfg, out, "config.json")
     # One shared env for every edit: a uv project per workspace costs gigabytes and thousands of files per video.
     # --inexact keeps optional extras (cuda, align) that were installed earlier
@@ -51,6 +55,7 @@ def main():
             print("WARN uv not found: install it (https://docs.astral.sh/uv/) or run the scripts with your own Python env")
     print(f"workspace {out}")
     print(f"format    {w}x{h} @ {fps} fps  ({cfg['orientation']})  mode={cfg['mode']}  clips={len(clips)}")
+    if cfg.get("layout"): L = cfg["layout"]; print(f"layout    {L['mode']}: the {w}x{h} camera band at native size in a {L['w']}x{L['h']} canvas, face {L.get('face_side', 'bottom')} (layout.json)")
     for c in cfg["clips"]: print(f"   {c['key']}  {c['dur']:7.2f}s  {os.path.basename(c['path'])}{'' if c['audio'] else '  (NO AUDIO)'}")
     if odd: print("WARN clips with a different size/fps (they will be conformed):", odd)
 

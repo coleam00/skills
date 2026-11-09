@@ -6,10 +6,13 @@ words, JetBrains Mono for anything technical). Override per project with <ws>/br
 The scene kit is drawn in the default colours; page() re-tints every default accent and background colour in the
 finished HTML to the brand's, so one brand.json changes the whole page.
 """
-import json, os, shutil
+import json, os, shutil, sys
 
 import numpy as np
 from PIL import Image
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from common import canvas, stacked
 
 TOKENS = {"bg": "#07090F", "surface": "#0E1525", "ink": "#F5F7FB", "ink2": "#93A1B8", "accent": "#3B82F6", "accent_light": "#60A5FA",
           "accent_deep": "#1E3A8A", "marker": "rgba(37,99,235,.62)", "bad": "#F87171", "font": "Inter", "mono": "JetBrains Mono",
@@ -39,8 +42,10 @@ def retint(html, t):
     return html
 
 def caption_geom(cfg):
-    """(top, height, font_px, max_width) of the caption band when the face is full frame."""
-    W, H = cfg["w"], cfg["h"]
+    """(top, height, font_px, max_width) of the caption band when the face is full frame (stacked layout: on the
+    graphics side of the seam, never over the face band)."""
+    W, H = canvas(cfg); G = stacked(cfg)
+    if G: return G["cap_top"], G["cap_h"], round(W * 0.059), round(W * 0.89)
     if H > W: return round(H * 0.66), 150, round(W * 0.059), round(W * 0.89)      # on the shirt, below the chin
     return round(H * 0.80), round(H * 0.13), round(H * 0.054), round(W * 0.78)    # lower third
 
@@ -51,7 +56,11 @@ def grain(path):
     Image.fromarray(n).save(path)
 
 def css(t, cfg):
-    W, H = cfg["w"], cfg["h"]; top, ch, fs, mw = caption_geom(cfg)
+    W, H = canvas(cfg); top, ch, fs, mw = caption_geom(cfg); G = stacked(cfg)
+    # stacked: the face video is the camera band at native size, parked in its band; overflow keeps a punch-in drift
+    # inside the band instead of over the graphics
+    band = (f"#facewrap {{ top:{G['band_y']}px; width:{round(G['fw'] * G['s'])}px; height:{G['bh']}px; overflow:hidden; }}"
+            f"#facewrap video {{ object-fit:fill; }}") if G else ""
     return f"""
 html,body {{ margin:0; padding:0; background:{t['bg']}; }}
 #root {{ position:relative; width:{W}px; height:{H}px; overflow:hidden; background:{t['bg']}; }}
@@ -71,7 +80,7 @@ html,body {{ margin:0; padding:0; background:{t['bg']}; }}
 #full {{ z-index:30; clip-path:inset(100% 0% 0% 0%); }}
 #fullbg {{ position:absolute; inset:0; opacity:0; background:linear-gradient(to bottom, #07090f 0%, rgba(30,58,138,.5) 55%, #080a13 100%), {t['bg']}; }}
 .scene {{ position:absolute; inset:0; opacity:0; color:{t['ink']}; font-family:'{t['font']}'; }}
-"""
+""" + band
 
 def captions_html(cap):
     ws_ = cap["words"]; out = ['<div id="caps">']
@@ -95,7 +104,7 @@ def page(d, cfg, tag, name, cap, extra_css, page_html, full_html, overlay_html, 
     tk (optional): the engine.Track, for the PIP bubble ring and the SCREEN track (screen.mp4) when the schedule used
     them. config.json "captions": "srt" leaves captions out of the picture (long-form YouTube uploads the .srt);
     the default "burn" burns them in as before."""
-    t = tokens(d); W, H = cfg["w"], cfg["h"]
+    t = tokens(d); W, H = canvas(cfg)
     proj = os.path.join(d, "hf", name); os.makedirs(proj, exist_ok=True)
     src = os.path.join(d, "cut", f"clean_{tag}.mp4"); dst = os.path.join(proj, "face.mp4")
     if not os.path.exists(dst) or os.path.getmtime(dst) < os.path.getmtime(src): shutil.copy2(src, dst)
@@ -109,7 +118,7 @@ def page(d, cfg, tag, name, cap, extra_css, page_html, full_html, overlay_html, 
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script></head><body>
 <div id="root" data-composition-id="{name}" data-start="0" data-duration="{duration}" data-width="{W}" data-height="{H}">
 <div id="stage"><div class="grain"></div></div>
-<div id="facewrap"><div id="facezoom"><video id="face" data-start="0" data-duration="{duration}" data-track-index="0" src="face.mp4" muted playsinline></video></div></div>
+<div id="facewrap"><div id="facezoom"{' data-layout-allow-overflow' if stacked(cfg) else ''}><video id="face" data-start="0" data-duration="{duration}" data-track-index="0" src="face.mp4" muted playsinline></video></div></div>
 <div id="edge"></div>
 <audio id="vo" data-start="0" data-duration="{duration}" data-track-index="1" src="face.mp4" data-volume="1"></audio>
 <div id="page">{page_html}</div><div id="full"><div id="fullbg"></div><div class="grain"></div>{getattr(tk, "full_pre", "")}{full_html}</div>{lay_html}{overlay_html}

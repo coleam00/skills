@@ -38,6 +38,7 @@ a re-run. Add the rest by hand.
 | `panel_layout` | panel size override: `w`, `h`, `src_h` |
 | `type_scale` | scales B-roll type in the wide 16:9 boxes (FULL, PIP); ~1.45 for a 16:9 talking head |
 | `split` | SPLIT window around the face: vertical `headroom` (default 0.5) and `below` (0.75), in face heights; 16:9 `width` (0.44 of the frame). A large face (a vertical reframe of a landscape camera) leaves the graphic a sliver at the defaults: `{"headroom": 0.2, "below": 0.5}`. The build report prints `SMALL SPLIT PAGE` when it is needed |
+| `layout` | written from `layout.json` (`split_wide.py` on a stacked canvas): `{"mode": "stacked", "w": 1080, "h": 1920, "face_side": "bottom", "seam": 1138}`. The cut is the camera band at native size; the B-roll page is `w` x `h`, face in its band, graphics and captions on the other side of the seam. Optional `max_upscale` (default 1.2): FACE beats grow the band to full frame only within it. `references/formats.md`, Stacked layout |
 | `inserts` | written by `insert_segment.py`; do not edit by hand |
 | `screen_cuts`, `screen_lags` | written by `assemble.py --screen` |
 

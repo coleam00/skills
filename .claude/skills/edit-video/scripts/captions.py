@@ -13,7 +13,7 @@ Grouping: split at punctuation, pauses > 0.25 s and segment joins; balance each 
 import json, os, re, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import load, save, ws
+from common import canvas, load, save, ws
 
 def balanced(idx, words, target, hard, nobreak=frozenset()):
     """Split a clause into near-equal phrases. nobreak: word indices that must stay with the word after them."""
@@ -62,7 +62,7 @@ def main():
                 words[i:i + len(A)] = new; i += len(B); hits += 1
             else: i += 1
         if not hits: print(f"WARN caption fix {a!r} matched nothing")
-    vertical = cfg["h"] > cfg["w"]
+    W, H = canvas(cfg); vertical = H > W                 # the stacked layout captions a 9:16 canvas, not the camera band
     target, hard = (22, 26) if vertical else (34, 42)
     merge_max = hard + (2 if vertical else 5)   # a merged phrase must still fit one line: 31 chars wrapped at 1080 wide
     nobreak = set()

@@ -37,7 +37,14 @@ def main():
     sm = difflib.SequenceMatcher(a=src, b=got, autojunk=False)
     print(f"WORDS source {len(src)} output {len(got)} similarity {sm.ratio():.4f}")
     for op, a0, a1, b0, b1 in sm.get_opcodes():
-        if op != "equal": print(f"   DIFF {op}: {' '.join(src[a0:a1])!r} -> {' '.join(got[b0:b1])!r}")
+        if op == "equal": continue
+        # where it is in the cut (the 1 s pad removed), and whether it sits on a join: Whisper stamps a segment's first
+        # (or a splice part's) word before its in point, so the source side misses a word the cut really has
+        t = (got_w[min(b0, len(got_w) - 1)].start - 1.0) if got_w else 0.0
+        jn = min((s["out_start"] for s in tl[1:]), key=lambda j: abs(j - t), default=None)
+        hint = (f"  (at the join @ {jn:.2f}: often a source stamp outside the segment; hear it with retranscribe.py <ws> cut:<tag>)"
+                if jn is not None and abs(jn - t) < 0.6 and op == "insert" else "")
+        print(f"   DIFF {op} @ {t:.2f}: {' '.join(src[a0:a1])!r} -> {' '.join(got[b0:b1])!r}{hint}")
     db = envelope(x, sr); thr = np.percentile(db[db > -60], 60) - 14
     print("JOINS  (cut @ t | silence | click ratio)")
     bad = 0

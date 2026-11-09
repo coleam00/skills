@@ -9,6 +9,11 @@ Modes
           Content lives in `pip_box`, which keeps clear of the bubble.
   SCREEN: the cut screen track (assemble.py --screen, same timeline as the face) fills the frame, speaker in the
           bubble: real slides, a demo, a browser.
+Stacked layout (config.json "layout": {"mode": "stacked", ...}, written by split_wide.py for a stacked recorder canvas):
+  the cut is the camera band at native size, parked in its own band (bottom by default) of the output canvas. SPLIT
+  puts the graphic in the band above the seam (the face does not move), FACE leaves that band on the background,
+  FULL covers everything. Captions sit on the graphics side of the seam. FACE grows the band to full frame only when
+  that needs no more than common.MAX_EXPAND (1.2x); PIP / SCREEN are not available (the face already has its band).
 Rules the engine enforces
   - cut sweep: a layout change never shows the next take's face for a split second (see _avoid_cut)
   - every scene element must be positioned inside page_box / full_box / pip_box (scenes.py takes the box)
@@ -17,6 +22,7 @@ Times come from words: tk.at("governed autonomy") -> start of that phrase on the
 import json, math, os, re
 
 import scenes, style
+from common import canvas, stacked
 
 TR = 0.6            # layout transition (s): long enough to read as a move, short enough not to lag speech
 MIN_DWELL = 1.5     # a scene on screen for less than this is flagged: viewers need 1.5-3 s to take a graphic in
@@ -33,8 +39,10 @@ class Track:
     def __init__(self, d, cfg, tag="v1"):
         self.d, self.cfg, self.tag = d, cfg, tag
         scenes.TYPE_SCALE = cfg.get("type_scale", 1.0)
-        self.W, self.H = cfg["w"], cfg["h"]; self.vertical = self.H > self.W
-        self.valign = "top" if self.vertical else "center"   # vertical SPLIT content hangs just under the face
+        self.G = stacked(cfg)                                     # None unless config.json "layout" is stacked
+        self.W, self.H = canvas(cfg); self.vertical = self.H > self.W
+        self.valign = "top" if self.vertical and not self.G else "center"   # vertical SPLIT content hangs just under the face;
+        # a stacked page band is a whole panel (~850 px tall): top-aligned content left its lower half empty
         self.tl = json.load(open(os.path.join(d, "cut", f"timeline_{tag}.json")))
         self.cap = json.load(open(os.path.join(d, "cut", f"captions_{tag}.json"), encoding="utf-8"))
         self.words = self.cap["words"]; self.D = round(self.tl[-1]["out_end"], 3)
@@ -51,6 +59,9 @@ class Track:
         ft = os.path.join(d, "cut", f"facetrack_{tag}.json")
         self.ftrack = json.load(open(ft))["track"] if os.path.exists(ft) else None   # face_track.py: [t, cx, cy, h]
         self._pending_face = None; self.merged = []; self.pip_since = None
+        if self.G and self.G["expand"]:                           # FACE is the full-frame face from the first frame
+            x, y, s = self._expanded(); self.add(f"tl.set('#facewrap',{{x:{x},y:{y},scale:{s}}},0);")
+            self._caps(False, 0, 0, instant=True)
 
     # ------------------------------------------------------------------ geometry from the measured face
     def _geometry(self):
@@ -58,8 +69,14 @@ class Track:
         faces = json.load(open(os.path.join(self.d, "faces.json"))) if os.path.exists(os.path.join(self.d, "faces.json")) else {}
         f = sorted(faces.values(), key=lambda v: v["w"])[len(faces) // 2] if faces else {"cx": W / 2, "cy": H * 0.38, "w": W * 0.3, "h": W * 0.3}
         fh = f["h"] * 1.05                                            # clean cut alternates ~0-10% punch-ins
-        ov = self.cfg.get("split", {})
-        if self.vertical:
+        ov = self.cfg.get("split", {}); G = self.G
+        if G:                                                    # stacked: the graphics band is the side away from the face
+            ct, ch = G["cap_top"], G["cap_h"]
+            if G["side"] == "bottom": self.page_box = (70, 110, W - 140, ct - 20 - 110); self.full_box = (80, 150, W - 160, ct - 30 - 150)
+            else:
+                y = ct + ch + 20; self.page_box = (70, y, W - 140, H - 90 - y); self.full_box = (80, y + 10, W - 160, H - 120 - y)
+            self.win = None; self.cap_split = None
+        elif self.vertical:
             top = max(0, f["cy"] - fh / 2 - ov.get("headroom", 0.5) * fh)   # room to breathe above the head
             bot = min(H, f["cy"] + ov.get("below", 0.75) * fh)              # chin clear, shirt kept for captions
             self.win = (0, round(top), W, round(bot))
@@ -113,7 +130,15 @@ class Track:
             self.full_pre = '<div id="pcard"></div>'                                            # style.page puts it under the scenes
             self.pip_box = (m + pad, (H - chh) // 2 + pad, cw - 2 * pad, chh - 2 * pad)
 
+    def _expanded(self):
+        """#facewrap transform that grows the stacked band to cover the frame (centred), for FACE beats."""
+        G = self.G; k = G["cover"] / G["s"]
+        return round((self.W - G["fw"] * G["cover"]) / 2, 2), round((self.H - G["fh"] * G["cover"]) / 2 - G["band_y"], 2), round(k, 5)
+
     def css(self):
+        if self.G:                                               # a thin lit line on the seam between face and graphics
+            return (f"#edge{{left:0;top:{self.G['seam'] - 2}px;width:{self.W}px;height:4px;opacity:1;"
+                    f"background:linear-gradient(90deg,rgba(96,165,250,.08),#60A5FA,rgba(96,165,250,.08));box-shadow:0 0 18px rgba(59,130,246,.55);}}")
         W, H = self.W, self.H; x0, y0, x1, y1 = self.win
         if self.vertical:
             return (f"#edge{{left:0;top:{y1 - y0 - 100}px;width:{W}px;height:110px;"
@@ -161,7 +186,11 @@ class Track:
         return -x0, -y0, clip
 
     def _caps(self, split, t, dur, instant=False):
-        if self.vertical:
+        if self.G:                                               # stacked: captions only move when the face grows to full frame
+            if not self.G["expand"]: return
+            y = 0 if split else round(self.H * 0.66) - self.G["cap_top"]
+            v = f"{{y:{y}}}"
+        elif self.vertical:
             y = (self.cap_split - self.cap_top) if split else 0
             v = f"{{y:{y}}}"
         else:  # horizontal: captions keep their full-width band under both panels (shrinking them into the face
@@ -169,6 +198,15 @@ class Track:
         self.add(f"tl.set('#caps',{v},{t:.3f});" if instant else f"tl.to('#caps',{{...{v},duration:{dur},ease:'power3.inOut'}},{t:.3f});")
 
     def _to_split(self, t, dur, instant=False):
+        if self.G:
+            if self.G["expand"]:                                 # full-frame face -> its band
+                x, y, s = self._expanded(); e = "#edge"
+                if instant: self.add(f"tl.set('#facewrap',{{x:0,y:0,scale:1}},{t:.3f}); tl.set('{e}',{{opacity:1}},{t:.3f});")
+                else:
+                    self.add(f"tl.fromTo('#facewrap',{{x:{x},y:{y},scale:{s}}},{{x:0,y:0,scale:1,duration:{dur},ease:'power3.inOut',immediateRender:false}},{t:.3f});")
+                    self.add(f"tl.fromTo('{e}',{{opacity:0}},{{opacity:1,duration:0.3,ease:'sine.out',immediateRender:false}},{t + dur * 0.7:.3f});")
+                self._caps(True, t, dur, instant)
+            return
         x, y, clip = self._win_state()
         if instant:
             self.add(f"tl.set('#facewrap',{{x:{x},y:{y},clipPath:'{clip}'}},{t:.3f}); tl.set('#edge',{{opacity:1}},{t:.3f});")
@@ -178,6 +216,15 @@ class Track:
         self._caps(True, t, dur, instant)
 
     def _to_face(self, t, dur, instant=False):
+        if self.G:
+            if self.G["expand"]:                                 # band -> full-frame face (at most MAX_EXPAND upscale)
+                x, y, s = self._expanded()
+                if instant: self.add(f"tl.set('#facewrap',{{x:{x},y:{y},scale:{s}}},{t:.3f}); tl.set('#edge',{{opacity:0}},{t:.3f});")
+                else:
+                    self.add(f"tl.to('#edge',{{opacity:0,duration:0.15}},{t:.3f});")
+                    self.add(f"tl.fromTo('#facewrap',{{x:0,y:0,scale:1}},{{x:{x},y:{y},scale:{s},duration:{dur},ease:'power3.inOut',immediateRender:false}},{t:.3f});")
+                self._caps(False, t, dur, instant)
+            return
         x, y, clip = self._win_state()
         if instant:
             self.add(f"tl.set('#facewrap',{{x:0,y:0,clipPath:'inset(0px 0px 0px 0px)'}},{t:.3f}); tl.set('#edge',{{opacity:0}},{t:.3f});")
@@ -375,7 +422,10 @@ class Track:
     def split(self, t):
         """Enter SPLIT. Returns the (possibly moved) start time; build the scene from the returned time."""
         self._resolve(t)
-        if self.mode == "FACE":
+        if self.mode == "FACE" and self.G and not self.G["expand"]:
+            # stacked band: the face does not move, so a picture cut near the entry needs no cover; the graphic just arrives
+            self._drift(self.face_since, t); self.seg_start = t; self.ready = t + 0.1
+        elif self.mode == "FACE":
             t = self._avoid_cut(t, "split"); self._drift(self.face_since, t + TR); self._to_split(t, TR); self.seg_start = t; self.ready = t + TR * 0.8
         elif self.mode == "FULL":
             self._to_split(t - 0.02, 0, instant=True)
@@ -418,6 +468,7 @@ class Track:
     def pip(self, t, scene):
         """Enter PIP: the graphic covers the frame (lay it out in pip_box), the face stays as the bubble.
         Returns the (possibly moved) start time; build the scene from it."""
+        if self.G: raise RuntimeError("stacked layout: PIP is not available (the face keeps its band); use split() or full()")
         self._resolve(t)
         m = self.mode
         if self.shape == "panel": self.add(f"tl.set('#pcard',{{opacity:1}},{t:.3f});")
@@ -439,6 +490,7 @@ class Track:
 
     def screen(self, t):
         """Enter SCREEN: the cut screen track fills the frame, the face stays as the bubble. Returns the start time."""
+        if self.G: raise RuntimeError("stacked layout: SCREEN is not available; a recorder's screen half is usually a script view")
         self._resolve(t)
         if not self.screen_src: raise RuntimeError(f"no screen track for tag {self.tag}: run assemble.py <ws> --screen first")
         self.used_screen = True; m = self.mode
@@ -524,7 +576,17 @@ class Track:
     def report(self):
         tot = sum(b - a for _, a, b in self.segments)
         print(f"B-roll {tot:.1f}s of {self.D:.1f}s ({100 * tot / self.D:.0f}%)")
-        if self.vertical and any(m == "SPLIT" for m, _, _ in self.segments) and self.page_box[3] < self.H * 0.35:
+        if self.G:
+            G = self.G; z = max([s.get("zoom", 1.0) for s in self.tl] or [1.0])
+            up = (G["cover"] if G["expand"] else G["s"]) * z * 1.03            # FACE beats at full frame scale by cover
+            print(f"   stacked: face band {G['fw']}x{G['fh']} at y={G['band_y']}..{G['band_y'] + G['bh']} of {self.W}x{self.H}, band scale {G['s']:.2f}, "
+                  f"take punch-ins up to {z:.2f}, face drift 1.03 -> largest upscale {up:.2f}x")
+            print(f"   graphics page_box {self.page_box}, captions y={G['cap_top']}..{G['cap_top'] + G['cap_h']}, seam y={G['seam']}; FACE beats "
+                  + (f"grow the face to full frame ({G['cover']:.2f}x)" if G["expand"] else f"keep the band (full frame would need {G['cover']:.2f}x)"))
+            if up > 1.2: print("   UPSCALE: the face is scaled over 1.2x; record the camera band at the canvas width or pass --no-punch")
+        if self.G and self.page_box[3] < self.H * 0.3:
+            print(f"   SMALL SPLIT PAGE: the stacked graphics band is {self.page_box[3]}px; the camera band leaves too little room")
+        elif self.vertical and any(m == "SPLIT" for m, _, _ in self.segments) and self.page_box[3] < self.H * 0.35:
             print(f"   SMALL SPLIT PAGE: graphics get {self.page_box[3]}px of {self.H} under a large face; set config.json "
                   f"\"split\": {{\"headroom\": 0.2, \"below\": 0.5}} (defaults 0.5 / 0.75 face heights) and rebuild")
         by = {}

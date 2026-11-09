@@ -10,6 +10,7 @@ format is the density of the edit, what is worth rendering, and how the footage 
 - Screen recordings with a face bubble
 - Talking head + slides (separate camera and screen)
 - One wide canvas
+- Stacked layout (camera band at native size)
 - Course and workshop footage
 - Start and end
 
@@ -65,7 +66,13 @@ setup: full-resolution face, full-resolution slides.
   - **Slides + face panel (no B-roll):** `assemble.py <ws> --no-punch --level --screen <folder> --tag a1`,
     `screen_bubble.py <ws> --tag a1 --panel` (check the look first with `--secs 20`), `export_final.py`.
     A deck that uses its full width needs the panel or `--inset 0.75`: a corner bubble over full-frame slides
-    covered text on most slides of one real deck.
+    covered text on most slides of one real deck. `screen_bubble.py` samples the screen under the bubble and prints
+    `WARN the face covers screen content` when text or UI sits there; a document column reaching the right edge
+    triggered it, and `--panel` cleared it.
+- `transitions.py detect` compares the SCREEN files at each join (the face files are one set and never change).
+  A join that only scrolls the same document is a plain cut, so a run of takes over one document usually has no
+  transition. `transitions.py render` needs the bubble baked into the picture; with separate files it stops with a
+  message, so join with plain cuts.
   - **Face + motion graphics:** the normal punch-in cut and a B-roll page, layouts FACE / PIP, SCREEN where the real
     slide or demo is the best picture.
 - Recorded files can drift or end early; check the face file's duration against the screen file's, and read the
@@ -85,13 +92,39 @@ uv run --project $S python $S/assemble.py <ws> --screen
   keyframe every second, mkv (survives a crash).
 - **Stacked canvas** (taller than wide: screen on top, camera below, common for a vertical recorder scene with the
   script or a teleprompter doc on screen): `split_wide.py` detects it, finds the seam and prints it (`--split-at Y` to
-  override, `--face-side top` if the camera is on top). The camera region is not 9:16, so for a vertical cut pass
-  `--reframe 1080x1920`: it crops the camera region to 9:16 around the measured face and scales it up (a 1080x780
-  region is ~2.5x, visibly softer; say so in the report). Split every clip into one folder with `--out-dir`, keep the
-  screen files apart with `--screen-dir`, then `init_workspace.py <that folder>`. Never let a recorder's script
+  override, `--face-side top` if the camera is on top). Use the stacked layout below. Never let a recorder's script
   view reach the cut.
 - `--backup` (side by side only) makes the plain "slides with a face cam" version immediately, so a human editor has something to cut if
   the motion edit is not used. Keep the slides' bottom-right corner clear for the bubble, or use `--inset`.
+
+## Stacked layout (camera band at native size)
+
+A stacked recording's camera region is a band (1080x782 of a 1080x1920 canvas), not a 9:16 frame. Blowing it up to
+full frame is a ~2.5x upscale: soft, and the strongest punch-in clips the hair. The stacked layout keeps the camera at
+native size in its own band and uses the rest of the canvas for graphics:
+
+```
+uv run --project $S python $S/split_wide.py <clip> --out-dir <faces> --screen-dir <screens>   # per clip; writes <faces>/layout.json
+uv run --project $S python $S/init_workspace.py <faces>      # prints "layout stacked: ..."; config.json gets "layout"
+```
+
+- The cut (steps 1-7) runs on the band itself. `layout.json` (`{"mode": "stacked", "w": 1080, "h": 1920,
+  "face_side": "bottom", "seam": 1138}`) puts the canvas size in config.json; the band's height sets the seam, so a
+  1080-wide band lands exactly where the recorder had it.
+- B-roll page (step 8): the face sits in its band, unscaled, the whole video. `tk.split()` + `tk.pscene()` put a
+  graphic in the band above the seam (`tk.page_box`, ~940x850); FACE leaves that band on the dark background; a thin
+  lit line marks the seam. Captions sit just above the seam on the graphics side, never on the face. Use SPLIT for
+  every beat: `tk.full()` works but hides the face, which is the point of the layout. `tk.pip()` / `tk.screen()` raise
+  (the face already has its band; the screen half is usually a script view).
+- FACE beats grow the band to full frame only when that is an upscale of at most 1.2x (config.json `"layout"`
+  `"max_upscale"`), i.e. when the band is nearly the canvas. For a 1080x782 band (2.46x) the band stays.
+- The build report prints the geometry and the largest upscale: band scale x the largest take punch-in (the alternating
+  punch-in that hides jump cuts is ~1.10x on alternate takes; `assemble.py --no-punch` keeps every take at 1.00x and
+  shows the jump cuts). `UPSCALE` is printed over 1.2x.
+- Deliverable: `finalize.py <ws> broll <Name>` renders the 1080x1920 canvas. `finalize.py --clean` exports the band
+  alone (1080x782), which is not a vertical video.
+- `--reframe 1080x1920` (the old route: crop the band to 9:16 and upscale) is only for a deliverable that must be a
+  plain full-frame talking head; say in the report that the face is upscaled.
 
 ## Course and workshop footage
 

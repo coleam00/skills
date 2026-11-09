@@ -156,7 +156,7 @@ def main():
     # ---- splices: a slip inside a clip ("the the", a restarted word) is removed by cutting the segment in two around
     # it. overrides.json "splice": {"c14_s01": [[51.40, 51.66]]} (source seconds); the parts are <key>, <key>b, ...
     # Find the range with the slip search (references/cutting.md) and prove it by transcribing the spliced audio.
-    out_segs = []
+    out_segs = []; segs_keys = {s["key"] for s in segs}
     for s in segs:
         cuts = sorted(ov.get("splice", {}).get(s["key"], []))
         if not cuts: out_segs.append(s); continue
@@ -169,6 +169,12 @@ def main():
             if j < len(edges) - 2: part.update(out=b, end=b, v_end=b, decay_end=b)
             out_segs.append(part)
         print(f"spliced {s['key']} at {cuts} -> {len(edges) // 2} parts")
+    # in/out set on a splice PART (c02_s01b, the key the FINAL table prints) only exists now: apply it here, or it was
+    # starred in the table and silently ignored. An override on the base key still sets the whole segment's ends above.
+    for s in out_segs:
+        if s["key"] in segs_keys: continue
+        if s["key"] in ov.get("in", {}): s["in"] = s["onset"] = ov["in"][s["key"]]
+        if s["key"] in ov.get("out", {}): s["out"] = ov["out"][s["key"]]
     segs = out_segs
     # ---- retakes: a segment that restarts the same words as one of the next three is almost always a flubbed take.
     # Reported, never dropped automatically: read both and put the loser in overrides.json "drop" (usually the earlier).

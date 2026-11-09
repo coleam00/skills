@@ -32,14 +32,17 @@ Decide from what the user gave and said. If it is not clear, ask one question.
 |---|---|---|
 | **Clean talking-head cut** (one take or many, no graphics) | 1-5, 9 | `references/cutting.md` |
 | **Screen recording + face bubble**, stitched with scene-change transitions | 1-6, 9 (`--no-punch`) | `references/transitions.md` |
+| **Separate face and screen files per take** (face panel or bubble over the screen) | 1-5 (`--no-punch --screen <folder>`), `transitions.py detect`, `screen_bubble.py`, 9 (`export_final.py`) | `references/formats.md`, Talking head + slides |
 | **Vertical Short** with captions, optional B-roll | 1-5, 7, 8, 9 | `references/captions-and-broll.md`, `references/formats.md` |
+| **Vertical Short from a stacked canvas** (screen/script on top, camera band below) | `split_wide.py`, then 1-5, 7, 8 (SPLIT beats), 9 | `references/formats.md`, Stacked layout |
 | **Long-form with motion-graphics B-roll** (16:9 talk, course, workshop) | 1-5, 7, 8, 9, one section first | `references/formats.md`, `references/captions-and-broll.md` |
 | **Inserting a finished segment** (ad read, intro) into any of the above | after step 2: `insert_segment.py` | `references/cutting.md`, Inserts |
 
 **Look at one frame of every source before step 1.** The pipeline assumes the camera fills the frame. Separate
 camera and screen files per take are supported (`assemble.py --screen`, synced by their audio), as is one recorder
-canvas holding both, side by side or stacked (`split_wide.py`, `--reframe 1080x1920` for a vertical cut from a stacked
-canvas): split those first and run everything else on the face files. See `references/formats.md`.
+canvas holding both, side by side or stacked (`split_wide.py`): split those first and run everything else on the face
+files. A stacked canvas keeps its camera band at native size (the stacked layout, written to config.json by
+`split_wide.py` + `init_workspace.py`) instead of being upscaled to full frame. See `references/formats.md`.
 
 Rarer jobs, each with its own file in `references/advanced/`: premium 3D-styled motion graphics
 (`motion-graphics-3d.md`), re-rendering a website so a locked voiceover gets new screen visuals (`dynamic-screen.md`),
@@ -85,7 +88,8 @@ uv run --project $S python $S/pauses.py <ws> --min 0.55 --apply     # splice eac
 
 `cutpoints.py` only trims heads and tails; the swallow or the second spent remembering a line sits mid-take. A pause
 waiting for something on screen is still cut; only a deliberate beat stays. Repeats are candidates: Whisper invents
-doubled words, so confirm each on the raw audio before splicing (`references/cutting.md`, Slips).
+doubled words, so confirm each on the raw audio before splicing (`retranscribe.py <ws> <clip> <start> <end> --no-prompt`;
+`references/cutting.md`, Slips).
 
 **Pass:** no internal pause over ~0.6 s left except deliberate beats; every splice confirmed on the raw clip.
 
@@ -156,7 +160,7 @@ on its word, nothing clipped or overlapping, the face never covered or flashed a
 ```
 uv run --project $S python $S/finalize.py <ws> broll <Name> [--tag v1]    # B-roll page: high render, loudness, sync, .srt
 uv run --project $S python $S/finalize.py <ws> --clean <Name> [--tag v1]  # the clean cut alone (the tag defaults to v1)
-uv run --project $S python $S/export_final.py <ws> <tag> <dest> <Name>    # transitions render (step 6)
+uv run --project $S python $S/export_final.py <ws> <tag> <dest> <Name>    # transitions render (step 6) or screen_bubble.py output
 uv run --project $S python $S/insert_segment.py <ws> --check <file> --tag <tag>   # only if a segment was inserted
 ```
 
@@ -188,7 +192,7 @@ anything that only a human can judge (motion feel, sound) as theirs to check.
 ## Resources
 
 - `scripts/`: the pipeline, in the order above. `doctor.py` (environment check), `align.py` (forced-alignment cut
-  points), `insert_segment.py` (finished segments, and the post-export check around them), `split_wide.py` and
+  points), `retranscribe.py` (re-transcribe any window: a suspected repeat, a word-diff line), `insert_segment.py` (finished segments, and the post-export check around them), `split_wide.py` and
   `screen_bubble.py` (side-by-side recordings, slides + face version), `face_track.py` (face panel follows the face),
   `empty_card.py` (blank-card stretches), `flicker_check.py`, `fix_skips.py` and `swap_audio.py`
   (`advanced/audio-repair.md`), `page_render.py` (`advanced/dynamic-screen.md`), `make_whoosh.py`.
