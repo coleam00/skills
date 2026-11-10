@@ -18,7 +18,8 @@ Every script prints its usage with `--help`.
 
 **One Python environment for every edit:** `$S/.venv`, built from `$S/pyproject.toml`. Never create a venv in a
 workspace. Optional extras: `cuda` (Windows + NVIDIA) and `align` (torch for forced alignment); install them with
-`uv sync --project $S --extra <name> --inexact`.
+`uv sync --project $S --extra <name> --inexact`. Installed as a plugin, `$S` is inside the plugin's versioned cache folder, so the
+environment (about 500 MB) is rebuilt after each plugin update; uv's cache makes that take seconds, but re-add any extras.
 
 **On a new machine, run `doctor.py` first.** It checks ffmpeg and its filters, CUDA, NVENC, Node, fonts and the
 Python packages, and says which parts of the pipeline will work. Everything runs on CPU; a GPU makes

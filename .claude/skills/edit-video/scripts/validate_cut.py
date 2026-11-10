@@ -91,12 +91,15 @@ def main():
                                 "-f", "image2pipe", "-vcodec", "png", "-"], capture_output=True).stdout
             ims.append((tt, Image.open(io.BytesIO(b)).convert("RGB")))
         rows.append((s["key"], ims))
-    sh = Image.new("RGB", (8 * (tw + 4) + 90, len(rows) * (th + 22)), (0, 0, 0)); dr = ImageDraw.Draw(sh)
-    for r, (k, ims) in enumerate(rows):
-        y = r * (th + 22); dr.text((2, y + th // 2), k, font=F, fill=(255, 255, 255))
-        for i, (tt, im) in enumerate(ims):
-            xx = 90 + i * (tw + 4); sh.paste(im, (xx, y + 18)); dr.text((xx, y + 2), f"{tt:.2f}{'|CUT' if i == 4 else ''}", font=F, fill=(255, 90, 90) if i == 4 else (220, 220, 220))
-    sh.save(p(d, "check", f"joins_{tag}.png")); print("wrote", os.path.join(d, "check", f"joins_{tag}.png"))
+    if not rows:   # a single-segment cut has no joins to show (an empty sheet used to crash here)
+        print("joins sheet: none (one segment, no joins)")
+    else:
+        sh = Image.new("RGB", (8 * (tw + 4) + 90, len(rows) * (th + 22)), (0, 0, 0)); dr = ImageDraw.Draw(sh)
+        for r, (k, ims) in enumerate(rows):
+            y = r * (th + 22); dr.text((2, y + th // 2), k, font=F, fill=(255, 255, 255))
+            for i, (tt, im) in enumerate(ims):
+                xx = 90 + i * (tw + 4); sh.paste(im, (xx, y + 18)); dr.text((xx, y + 2), f"{tt:.2f}{'|CUT' if i == 4 else ''}", font=F, fill=(255, 90, 90) if i == 4 else (220, 220, 220))
+        sh.save(p(d, "check", f"joins_{tag}.png")); print("wrote", os.path.join(d, "check", f"joins_{tag}.png"))
     out_words = []
     for s in tl:
         for w in W[s["clip"]]:
