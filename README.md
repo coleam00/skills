@@ -160,6 +160,7 @@ For the last two, restart your session (or run `/skills`) and they'll show up.
 | `agent-browser` | Browser automation for the agent: navigate, fill, click, screenshot, extract |
 | `ast-grep` | Structural code search by AST pattern instead of text |
 | `drive-screen` | Real desktop control: focus a window, type, paste, click, screenshot. Windows, macOS, Linux |
+| `edit-video` | Edits talking-head footage into a finished video the agent verifies without watching: tight cuts placed with forced alignment, pauses and slips removed, punch-ins and split edits, scene-change transitions, captions, HyperFrames B-roll, inserted segments, and a loudness-normalised, sync-checked export. Run `doctor.py` first |
 | `setup-ai-tutor` | Stands up the course's sample project. Sample-specific, so adapt it or delete it |
 
 ## Using these with other agents

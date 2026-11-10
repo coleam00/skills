@@ -1,0 +1,16 @@
+{
+  "source": "/path/to/recording-folder",
+  "mode": "clips",
+  "w": 1920,
+  "h": 1080,
+  "fps": 60,
+  "orientation": "horizontal",
+  "clips": [
+    {"key": "c01", "path": "/path/to/recording-folder/1.mkv", "dur": 16.24, "audio": true},
+    {"key": "c02", "path": "/path/to/recording-folder/2.mkv", "dur": 17.56, "audio": true}
+  ],
+  "language": "en",
+  "captions": "burn",
+  "bubble": [1790, 948, 122],
+  "type_scale": 1.45
+}

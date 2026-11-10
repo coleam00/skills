@@ -1,0 +1,32 @@
+# The one Python environment for every edit (scripts/.venv). Workspaces never get their own.
+#   uv sync --project <this folder>                         core: cut, validate, captions, export
+#   uv sync --project <this folder> --extra cuda --inexact   Windows + NVIDIA: the CUDA libraries faster-whisper loads
+#   uv sync --project <this folder> --extra align --inexact  torch + torchaudio for align.py (forced alignment)
+[project]
+name = "edit-video"
+version = "0.1.0"
+description = "Scripts for the edit-video skill: cut, validate, caption and export talking-head video"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "faster-whisper>=1.1",
+    "av<19",  # av 19 dropped an open() argument faster-whisper 1.2.x still passes
+    "numpy",
+    "scipy",
+    "soundfile",
+    "pillow",
+    "opencv-python-headless<5",  # 5.x removed the Haar face cascades assemble.py uses
+]
+
+[project.optional-dependencies]
+cuda = [
+    "nvidia-cublas-cu12; sys_platform == 'win32'",
+    "nvidia-cudnn-cu12==9.*; sys_platform == 'win32'",
+]
+align = [
+    # MMS_FA forced alignment. torchaudio 2.9 removed forced_align, so stay below it.
+    "torch>=2.1,<2.9",
+    "torchaudio>=2.1,<2.9",
+]
+
+[tool.uv]
+package = false
