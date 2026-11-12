@@ -50,6 +50,7 @@ class Track:
         self.joins = [s["v_out_start"] for s in self.tl[1:]]
         self.js, self.segments, self.moves, self.shown = [], [], [], []   # shown: (scene, t) each time a scene goes up
         self.keys = {}      # scene -> when its main visual has landed (tk.key); dwell is measured from here
+        self.assets = {}    # published name -> source file (screenshots for S.shot); style.page copies them
         self.mode, self.face_since, self.seg_start = "FACE", 0.0, 0.0
         self.ready = 0.0   # scenes.py holds every element until this time: text never lands on a panel still sliding in
         self.cap_top, self.cap_h, _, _ = style.caption_geom(cfg)
@@ -159,6 +160,12 @@ class Track:
 
     def add(self, s): self.js.append(s)
 
+    def asset(self, path):
+        """Register an image the page shows; returns the name to put in src (style.page copies it into the project)."""
+        name = "a_" + os.path.basename(path).replace(" ", "_")
+        if self.assets.get(name, path) != path: name = f"a{len(self.assets)}_" + os.path.basename(path).replace(" ", "_")
+        self.assets[name] = os.path.abspath(path); return name
+
     def key(self, scene, t):
         """Mark when a scene's main visual (the screenshot, the lit cards, the payoff) has fully landed."""
         self.keys[scene] = max(self.keys.get(scene, 0.0), t)
@@ -174,6 +181,16 @@ class Track:
                 nt = J - (0.52 if kind == "full" else 0.4); self.moves.append((kind, t, nt)); return nt
             if kind == "face" and t < J <= t + 0.6:
                 self.moves.append((kind, t, J)); return J
+        return t
+
+    def _snap_join(self, t, kind):
+        """SCREEN <-> graphic over a recorded screen track: the screen changes at the take joins, not at the words, so
+        a switch near a join that ignores it shows the wrong take's raw screen for a few frames (read as a glitch).
+        The graphic is fully in 0.05 s before the join; the screen comes back exactly on it."""
+        for J in self.joins:
+            if abs(J - t) <= 0.8:
+                nt = J - (TR if self.shape == "panel" else FULL_IN) - 0.05 if kind == "pip" else J
+                self.moves.append((kind, t, nt)); return nt
         return t
 
     # ------------------------------------------------------------------ layout moves
@@ -470,6 +487,7 @@ class Track:
         """Enter PIP: the graphic covers the frame (lay it out in pip_box), the face stays as the bubble.
         Returns the (possibly moved) start time; build the scene from it."""
         if self.G: raise RuntimeError("stacked layout: PIP is not available (the face keeps its band); use split() or full()")
+        if self.mode == "SCREEN": t = self._snap_join(t, "pip")
         self._resolve(t)
         m = self.mode
         if self.shape == "panel": self.add(f"tl.set('#pcard',{{opacity:1}},{t:.3f});")
@@ -492,9 +510,18 @@ class Track:
     def screen(self, t):
         """Enter SCREEN: the cut screen track fills the frame, the face stays as the bubble. Returns the start time."""
         if self.G: raise RuntimeError("stacked layout: SCREEN is not available; a recorder's screen half is usually a script view")
-        self._resolve(t)
         if not self.screen_src: raise RuntimeError(f"no screen track for tag {self.tag}: run assemble.py <ws> --screen first")
+        if self.mode in ("FULL", "PIP"): t = self._snap_join(t, "screen")
+        self._resolve(t)
         self.used_screen = True; m = self.mode
+        if m == "FACE" and t < 0.3 and not self.shown:
+            # a recording that opens on the screen: start there, the face already small. Animating FACE -> SCREEN at 0
+            # put a full-frame camera shot and a shrinking face under the first word.
+            self.seg_start = 0.0; self._set_center(0.3); x, y, s, clip = self._bub_state()
+            self._layer_in("#screen", 0.0, instant=True); self.used_bubble = True
+            self.add(f"tl.set('#facewrap',{{x:{x},y:{y},scale:{s},clipPath:'{clip}',zIndex:40}},0);tl.set('#bring',{{opacity:1}},0);")
+            self._caps_bubble(True, 0.0)
+            self.shown.append((None, 0.0)); self.mode = "SCREEN"; self.ready = 0.0; return 0.0
         if m == "FACE":
             t = self._avoid_cut(t, "screen"); self._drift(self.face_since, t + TR); self.seg_start = t
             self._layer_in("#screen", t); self._shrink_to_bubble(t, TR)

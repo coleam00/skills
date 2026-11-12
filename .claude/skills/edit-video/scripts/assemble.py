@@ -19,7 +19,7 @@ output timeline (out_start/out_end for audio, v_out_start for the picture cut). 
 import json, os, subprocess, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import load, p, q, run, save, ws
+from common import load, p, probe, q, run, save, ws
 
 PUNCH_STEP = 1.10   # ~10% face-size step between alternating takes: visible as a cut, not as a zoom
 FADE_IN, FADE_OUT = 0.008, 0.015   # seconds; kills clicks at sample-level discontinuities
@@ -82,7 +82,7 @@ def cut_screen(d, cfg, tl, tag, args):
     val = args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("--") else None
     lags = cfg.setdefault("screen_lags", {})
     if val: cfg["screen_from"] = os.path.abspath(val)      # transitions.py detect compares these screen files, not the faces
-    srcs, fv = [], []
+    srcs, fv, sdur = [], [], {}
     for s in tl:
         sp = screen_path(s["path"], val) or s["path"]
         if sp not in srcs: srcs.append(sp)
@@ -94,7 +94,13 @@ def cut_screen(d, cfg, tl, tag, args):
         lag = lags.get(os.path.basename(sp), 0.0) if sp != s["path"] else 0.0
         a, b = s["v_in"] - lag, s["v_out"] - lag
         pad = f",tpad=start_duration={-a:.6f}:start_mode=clone" if a < 0 else ""   # screen file started after this head
-        fv.append(f"[{n}:v]trim=start={max(0, a):.6f}:end={b:.6f},setpts=PTS-STARTPTS{pad},fps={fps},"
+        # a screen file that stops before this out point (separate camera/screen files often end early) would make the
+        # segment short and shift every later screen segment early: hold its last frame to the exact length instead
+        if sp not in sdur: sdur[sp] = probe(sp)["dur"]
+        sd = sdur[sp]
+        if b > sd + 0.02: print(f"  screen {os.path.basename(sp)} ends {b - sd:.2f} s before {s['key']}'s out point: last frame held")
+        pad += f",tpad=stop_mode=clone:stop_duration={max(0.0, b - sd) + 0.5:.3f}"
+        fv.append(f"[{n}:v]trim=start={max(0, a):.6f}:end={b:.6f},setpts=PTS-STARTPTS{pad},fps={fps},trim=duration={b - a:.6f},"
                   f"scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p[v{n_}]")
     save(cfg, d, "config.json")
     filt = ";".join(fv) + ";" + "".join(f"[v{i_}]" for i_ in range(len(tl))) + f"concat=n={len(tl)}:v=1:a=0[vc]"

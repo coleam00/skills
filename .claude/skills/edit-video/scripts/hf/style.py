@@ -109,6 +109,9 @@ def page(d, cfg, tag, name, cap, extra_css, page_html, full_html, overlay_html, 
     src = os.path.join(d, "cut", f"clean_{tag}.mp4"); dst = os.path.join(proj, "face.mp4")
     if not os.path.exists(dst) or os.path.getmtime(dst) < os.path.getmtime(src): shutil.copy2(src, dst)
     lay_css, lay_html = tk.layers() if tk is not None else ("", "")
+    for nm, srcp in (getattr(tk, "assets", {}) or {}).items():      # screenshots registered with tk.asset (S.shot)
+        dstp = os.path.join(proj, nm)
+        if not os.path.exists(dstp) or os.path.getmtime(dstp) < os.path.getmtime(srcp): shutil.copy2(srcp, dstp)
     if tk is not None and tk.used_screen:
         ssrc = os.path.join(d, tk.screen_src) if not os.path.isabs(tk.screen_src) else tk.screen_src; sdst = os.path.join(proj, "screen.mp4")
         if not os.path.exists(sdst) or os.path.getmtime(sdst) < os.path.getmtime(ssrc): shutil.copy2(ssrc, sdst)

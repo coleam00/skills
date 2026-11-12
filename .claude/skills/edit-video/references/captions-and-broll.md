@@ -148,6 +148,7 @@ and returns HTML; times are output seconds from `tk.at`. Type scales with the bo
 | `S.quote`, `S.bignum` | one big statement with its key phrase swept; numbered items |
 | `S.title_card` | a held topic card (kicker, title, rule, optional line on its word): fills the stacked band between beats |
 | `S.image_cta`, `S.link_pill` | a screenshot on a card with a typed URL; a persistent URL above the captions |
+| `S.shot` | a real capture of the product in a window: push-ins, rings, spotlight and state swaps on the words (`screen-inserts.md`) |
 | `M.system_map` | a four-part framework round a centre; `focus=i` flies into one node (section openers) |
 | `M.load_context`, `M.flow_hub`, `M.converge` | files flying into a context window; packets into a hub; chips merging |
 | `M.gate`, `M.test_runner`, `M.pulse` | pass/block at a gate; rows flipping to PASS; a pulse line dropping labels |

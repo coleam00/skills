@@ -59,7 +59,15 @@ A recorder writing the camera and the screen as separate files per take (both ca
 setup: full-resolution face, full-resolution slides.
 
 - Put the camera files in the clip folder (`clips/01_face.mkv`, ...) and the screen files in their own folder with
-  matching names (`_face.` -> `_screen.` or `-face ` -> `-screen `), in recording order.
+  matching names (`_face.` -> `_screen.` or `-face ` -> `-screen `), in recording order. A recorder that writes the
+  camera, the screen and a composite per take into one folder needs no copying: `init_workspace.py <folder> --out
+  <ws> --match "*-face *"` keeps only the camera files, and `--screen <folder>` finds each take's screen file there.
+- **Camera files that stop early (run this before transcribing).** A recorder's separate camera file can end ~1 s
+  before its main recording; when the last word runs into that edge, the take ends mid-word and no later gate can
+  tell, because every check only hears what the file holds. `pad_takes.py <ws> --long "<folder>/<composite glob>"`
+  prints `ENDS ON SOUND` for those takes (measured on the longer file just past the camera file's end); `--apply`
+  rebuilds them with the long file's audio and the last camera frame held. Real case: 2 of 34 takes, both missed by
+  two complete edits that passed every other check.
 - `assemble.py <ws> --screen <screen folder>` cuts the screen track with the face's exact picture trims and syncs each
   pair by cross-correlating their audio: separate files start up to ~0.8 s apart, differently every take.
 - Then either deliverable:
@@ -71,14 +79,14 @@ setup: full-resolution face, full-resolution slides.
     triggered it, and `--panel` cleared it.
 - `transitions.py detect` compares the SCREEN files at each join (the face files are one set and never change).
   A join that only scrolls the same document is a plain cut, so a run of takes over one document usually has no
-  transition. Where the screen really changes (a new page, app or section) at the end of a thought, the wipe works
-  on separate files too: `transitions.py room`, re-assemble with a new tag, `transitions.py render --tag <tag>` (wipes
-  the screen cut, gives the face track the live, HELD, live switch inside each wipe), then `screen_bubble.py --tag
-  <tag> --panel` picks both up. references/transitions.md, Separate face and screen files.
+  transition. Where the screen really changes (a new page, app or section) at the end of a thought, run
+  `screen_bubble.py --tag <tag> --panel` first, then `transitions.py render --tag <tag>`: the push moves the whole
+  composite, no room tone or re-assembly needed. references/transitions.md, The push.
   - **Face + motion graphics:** the normal punch-in cut and a B-roll page, layouts FACE / PIP, SCREEN where the real
     slide or demo is the best picture.
-- Recorded files can drift or end early; check the face file's duration against the screen file's, and read the
-  sync of a few frames by eye.
+  - **The slides as recorded + animated inserts where the speaker shows the product:** `references/screen-inserts.md`.
+- A screen file that ends before its take's out point is held on its last frame to the exact length (assemble prints
+  it): a short segment would shift every later screen segment early. Read the sync of a few frames by eye.
 
 ## One wide canvas
 

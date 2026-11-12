@@ -86,7 +86,7 @@ spacing), run it on a known-bad render first and make sure it fails.
 | Cut | eyes | `check/eyes_*.png` | eyes on lens through every picture out point |
 | Cut | levels | per-segment `ebur128` | spread under ~1.5 LU, else `--level` |
 | Transitions | where | `check/transition_joins.png` + the words | only scene changes at thought ends |
-| Transitions | bubble | `check/wipe_bubbles_<tag>.png` | eyes on lens in every frame of every row |
+| Transitions | push | frame strip across every push + the frames just outside it | incoming left, outgoing right at mid-push; never the next screen on both halves; edges equal the untouched cut (soft wipe: `check/wipe_bubbles_<tag>.png`, eyes on lens) |
 | Captions | verbatim, readable | printed phrases | names right and whole, nothing under 0.5 s |
 | B-roll | lint / inspect | `render.py` | 0 errors, inspect clean |
 | B-roll | dwell | build report | 0 `SHORT DWELL` |

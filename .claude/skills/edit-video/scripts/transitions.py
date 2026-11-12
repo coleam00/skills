@@ -3,7 +3,13 @@
 Usage:
   uv run --project $S python transitions.py <ws> detect [--threshold 6]   # which clip joins change scene
   uv run --project $S python transitions.py <ws> room [--tail 0.45] [--head 0]  # widen those joins (edits cuts.json)
-  uv run --project $S python transitions.py <ws> render [--tag v1] [--dur 0.34] [--whoosh-db -6.4] [--sfx file --sfx-peak s] [--kind smoothleft]
+  uv run --project $S python transitions.py <ws> render [--tag v1] [--kind push|smoothleft] [--dur 0.35] [--whoosh-db -6.4] [--sfx file --sfx-peak s]
+
+DEFAULT: --kind push (scripts/push.py): the whole frame slides out right, the next clip slides in from the left,
+motion-blurred, whoosh peaking on the PICTURE cut. No `room` step and no held face: transition joins keep plain-cut
+tails (~0.2-0.35 s heard pause). Separate face + screen files: run screen_bubble.py first; the push moves the
+composite. Everything below about room tone, centring in the pause, the bubble hold and wiped face/screen cuts is the
+legacy soft wipe (--kind smoothleft).
 
 Rules (references/transitions.md): only at clip joins where the SCREEN changes, never at a tab switch inside one
 clip, never at a join that stays on the same screen. The whoosh is quiet and lands in silence, never over a word,
@@ -132,7 +138,11 @@ def dur(path):
 
 def render(d, cfg):
     global D
-    tag = arg("--tag", "v1"); db = arg("--whoosh-db", -6.4); kind = arg("--kind", "smoothleft"); fps = cfg["fps"]; D = arg("--dur", D)
+    tag = arg("--tag", "v1"); db = arg("--whoosh-db", -6.4); kind = arg("--kind", "push"); fps = cfg["fps"]
+    if kind == "push":
+        import push
+        return push.render_push(d, cfg, tag, arg("--dur", 0.35), arg("--sfx", ASSET), arg("--sfx-peak", PEAK), db, load)
+    D = arg("--dur", D)
     # separate face and screen files: the wipe belongs on the SCREEN cut, and the face track (composed later by
     # screen_bubble.py as a bubble or panel) gets the live, HELD, live switch over its whole frame
     sep = bool((cfg.get("screen_cuts") or {}).get(tag)) and not cfg.get("bubble")

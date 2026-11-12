@@ -51,9 +51,11 @@ def chunked(proj, name, fps, qual, out, D, secs, only=None):
             po = os.path.join(cd, "out", "chunk.mp4")
             if not os.path.exists(po): sys.exit(f"chunk {k} has no earlier render to keep: {po}")
             print(f"  chunk {k}: kept", flush=True); parts.append(po); continue
-        for f in os.listdir(proj):                                  # small assets: copy; media: this chunk's slice
+        for f in os.listdir(proj):                                  # small assets (and their folders): copy; media: this chunk's slice
             p = os.path.join(proj, f)
             if os.path.isfile(p) and f not in media and f != "index.html": shutil.copy2(p, os.path.join(cd, f))
+            elif os.path.isdir(p) and f not in ("out", "node_modules") and not f.endswith("_chunks"):
+                shutil.copytree(p, os.path.join(cd, f), dirs_exist_ok=True)   # left out, every <img> in it rendered blank
         for m in media:
             run_ = ["ffmpeg", "-v", "error", "-y", "-ss", f"{a:.6f}", "-i", os.path.join(proj, m), "-t", f"{b - a + 1 / fps:.6f}",
                     "-c:v", "libx264", "-crf", "10", "-preset", "veryfast", "-r", str(fps), "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
@@ -85,6 +87,11 @@ def main():
     proj = os.path.join(d, "hf", name)
     out = os.path.abspath(a[a.index("--out") + 1]) if "--out" in a else os.path.join(proj, "out", f"{name}_{qual}.mp4")
     os.makedirs(os.path.dirname(out), exist_ok=True)
+    # a missing image renders as an empty box with lint and inspect both passing: check every local src first
+    html = open(os.path.join(proj, "index.html"), encoding="utf-8").read()
+    missing = sorted({s for s in re.findall(r'src="([^"]+)"', html) if "://" not in s and not s.startswith("data:")
+                      and not os.path.exists(os.path.join(proj, s))})
+    if missing: sys.exit(f"missing assets in {proj}: {missing}")
     lint = sh(f'npx -y {HF} lint "{proj}"')
     errs = re.findall(r"✗.*", lint); summary = re.findall(r"◇.*", lint)
     print("lint:", summary[-1] if summary else lint[-300:])
