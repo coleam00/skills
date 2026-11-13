@@ -33,6 +33,11 @@ it. When a case is not covered by a rule, reason from these.
   half, so a re-transcription still "hears" a clipped word. Place cuts with forced alignment and the waveform; use ASR
   only as a second check. A head moved by 0.1 s on Whisper's word start cut into "So" while the transcript stayed
   clean.
+- **A word's decay is not dead air.** validate_cut once counted everything 14 dB under speech as silence, so it flagged
+  6 of 37 joins in a cut the speaker had approved and shipped, and 10 of 27 in a default edit: all audible decay that
+  cutpoints keeps on purpose and that TAIL ON SOUND forbids cutting, so an agent went round in circles between the two
+  flags. At 20 dB under speech the shipped cut has 1 borderline join, and 0.6 s of planted room tone or a real breath
+  at a join still reads 0.67-0.80 s.
 - **A file can start after, and end before, the words do.** Separate camera files stopped ~1 s before the main
   recording, and two takes' last words ran into that edge; on another recording they started up to 2.6 s late and four
   takes lost their opening words. Complete edits passed every gate with the words missing: each check only hears what
