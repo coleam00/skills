@@ -50,6 +50,22 @@ Rarer jobs, each with its own file in `references/advanced/`: premium 3D-styled 
 (`motion-graphics-3d.md`), re-rendering a website so a locked voiceover gets new screen visuals (`dynamic-screen.md`),
 and repairing recorder audio dropouts (`audio-repair.md`).
 
+## Basic or full
+
+**Basic is the default:** everything runs on this machine and nothing leaves it. **Full** adds models through one
+OpenRouter key, and runs only when the user asks for the full pipeline or names one of its steps. Never because a key
+happens to be set: full sends the unpublished footage, and for a voice fix a sample of the speaker's voice, to outside
+providers.
+
+| Full step | What it does | Run |
+|---|---|---|
+| Transcription | Every transcription in the pipeline (first pass, cut-point checks, validation) goes to an OpenRouter model instead of the local GPU | `openrouter.py <ws> enable`, before `transcribe.py` |
+| Video review | A video model watches the export and returns timestamped notes; `--model` swaps the reviewer | `video_review.py <ws> <export>` after step 9 |
+| Thumbnail concepts | One brief, the speaker's face as a reference, several image models, the cost of each image | `thumbnails.py <ws> "<brief>"` |
+| Fixing a word | A misspoken word or line regenerated in the speaker's cloned voice and spliced in, verified by transcription | `fix_word.py <ws> <clip> <start> <end> "<line>"` (consent first) |
+
+`openrouter.py <ws> costs` prints what every call cost. Models, measured costs and the traps: `references/openrouter.md`.
+
 ## 0. Ask first (one message, then go)
 
 1. **Deliverables:** clean cut, captions, B-roll? One version or variants to compare? Burned captions or an .srt?
@@ -63,15 +79,16 @@ Then work without further check-ins until there is something to show.
 
 ```
 uv run --project $S python $S/init_workspace.py "$ARGUMENTS" --out <ws>   # config.json; --match "<glob>" picks the camera files
-uv run --project $S python $S/pad_takes.py <ws> [--long "<glob>"]        # separate camera files: takes cut off mid-word
+uv run --project $S python $S/pad_takes.py <ws> [--long "<glob>"]        # separate camera files: takes cut off at either end
 uv run --project $S python $S/transcribe.py <ws>                          # faster-whisper large-v3, word timestamps
 ```
 
 Pass `--out`: the default workspace is `<folder>/_edit` and finals default to `<folder>/final`, inside the source
 folder, where another edit of the same footage may already live. A recorder that writes camera, screen and composite
 files per take into one folder takes `--match` (`references/formats.md`, Talking head + slides). With separate camera
-files, `pad_takes.py` runs before transcribing: a camera file that stops while a word is still sounding clips that
-word, and no later gate can hear it (`--apply` rebuilds those takes from the longer recording).
+files, `pad_takes.py` runs before transcribing: a camera file that starts late or stops early while the speaker is
+talking clips those words, and no later gate can hear it (`--apply` rebuilds those takes from the longer recording;
+`--inset x,y,w,h`, the camera's box inside it, keeps the face moving over a restored head).
 
 **Pass:** the printed transcript is read end to end. Retakes, false starts, asides and contradictions (a date or
 price said two ways) are noted. Contradictions go in the report as questions; the edit keeps what was said.
@@ -207,7 +224,7 @@ anything that only a human can judge (motion feel, sound) as theirs to check.
 
 - `scripts/`: the pipeline, in the order above. `doctor.py` (environment check), `align.py` (forced-alignment cut
   points), `retranscribe.py` (re-transcribe any window: a suspected repeat, a word-diff line), `insert_segment.py` (finished segments, and the post-export check around them), `split_wide.py` and
-  `screen_bubble.py` (side-by-side recordings, slides + face version), `pad_takes.py` (camera files that stop early),
+  `screen_bubble.py` (side-by-side recordings, slides + face version), `pad_takes.py` (camera files that start late or stop early),
   `screen_spans.py` (where the screen leaves the slides), `face_track.py` (face panel follows the face),
   `empty_card.py` (blank-card stretches), `flicker_check.py`, `fix_skips.py` and `swap_audio.py`
   (`advanced/audio-repair.md`), `page_render.py` (`advanced/dynamic-screen.md`), `make_whoosh.py`.
@@ -222,4 +239,5 @@ anything that only a human can judge (motion feel, sound) as theirs to check.
 - `references/screen-inserts.md`: animated product shots (`S.shot`) over the spans a recorded screen leaves the slides.
 - `references/formats.md`: vertical vs 16:9 vs long-form, recording setups, render economics.
 - `references/lessons.md`: the lessons behind the rules, grouped by topic.
+- `references/openrouter.md`: the full pipeline: models per step, what each sends out, measured costs, traps.
 - `references/advanced/`: `motion-graphics-3d.md`, `dynamic-screen.md`, `audio-repair.md`.

@@ -94,6 +94,10 @@ Set `"bubble": [cx, cy, r]` in config.json (measured on a full-resolution crop) 
 
 ## Separate face and screen files
 
+**This section is the soft wipe (`--kind smoothleft`).** For the default push the order is shorter: `detect`, then
+`screen_bubble.py <ws> --tag <tag> --panel`, then `render --tag <tag>` (it pushes the whole composite; no `room`, no
+re-assemble, no `wipe_bubbles.py`). See "The push (default)" above.
+
 A recorder that writes the camera and the screen as separate files per take (`assemble.py --screen`) gets the same
 wipe, applied where it belongs:
 

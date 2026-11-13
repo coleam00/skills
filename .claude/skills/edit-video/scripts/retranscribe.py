@@ -16,7 +16,7 @@ in the file's own timeline. Whisper's times are a second check, never cut points
 import os, sys, tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import run, whisper_model
+from common import asr_model, run, whisper_model
 
 PROMPT = "Hello, and welcome. Today I'm showing you something new. Let's get into it."   # transcribe.py's prompt
 
@@ -45,6 +45,10 @@ def main():
     flags = {"--pad", "--model"}
     pos = [x for i, x in enumerate(sys.argv[1:], 1) if not x.startswith("--") and sys.argv[i - 1] not in flags]
     src, t0, t1, label = resolve(pos)
+    ws_cfg = None                     # a workspace argument follows that workspace's mode (basic: local, full: OpenRouter)
+    if os.path.isdir(pos[0]) and os.path.exists(os.path.join(pos[0], "config.json")):
+        import json
+        ws_cfg = json.load(open(os.path.join(pos[0], "config.json"), encoding="utf-8"))
     if t1 <= t0: sys.exit("end must be after start")
     pad = arg("--pad", 1.0)
     tmp = os.path.join(tempfile.gettempdir(), f"_retranscribe_{os.getpid()}.wav")
@@ -52,7 +56,7 @@ def main():
         # pad with silence first, then the window, 16 kHz mono: what transcribe.py feeds the model
         run(["ffmpeg", "-v", "error", "-y", "-ss", f"{t0:.3f}", "-t", f"{t1 - t0:.3f}", "-i", src, "-vn", "-ac", "1", "-ar", "16000",
              "-af", f"adelay={int(pad * 1000)}:all=1", tmp])
-        m = whisper_model(arg("--model", "large-v3"))
+        m = asr_model(ws_cfg, pos[0]) if ws_cfg else whisper_model(arg("--model", "large-v3"))
         segs, _ = m.transcribe(tmp, language="en", word_timestamps=True, vad_filter=False, beam_size=5,
                                condition_on_previous_text=False, initial_prompt=None if "--no-prompt" in sys.argv else PROMPT)
         words = [(w.word.strip(), w.start - pad + t0, w.end - pad + t0, w.probability) for s in segs for w in (s.words or [])]

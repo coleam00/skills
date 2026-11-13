@@ -1,4 +1,5 @@
-"""Word-level transcription of every clip with faster-whisper large-v3 (CUDA if available, else CPU int8).
+"""Word-level transcription of every clip: faster-whisper large-v3 locally (basic), or the OpenRouter transcription
+model when the full pipeline is on (openrouter.py <ws> enable).
 
 Usage: uv run --project $S python transcribe.py <ws> [--model large-v3]
 Writes <ws>/audio/<key>_48k.wav, <key>_16k.wav, <ws>/words.json {key: [{w, s, e, p}]} (seconds in the clip) and
@@ -8,7 +9,7 @@ Skips clips already transcribed unless --force.
 import os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import load, p, save, wav, whisper_model, ws
+from common import asr_model, load, p, save, wav, ws
 
 # A punctuated, capitalised prompt; without it Whisper sometimes returns a whole take lower-case with no punctuation
 PROMPT = "Hello, and welcome. Today I'm showing you something new. Let's get into it."
@@ -17,7 +18,8 @@ def main():
     d, cfg = ws()
     model_name = sys.argv[sys.argv.index("--model") + 1] if "--model" in sys.argv else "large-v3"
     words = {} if "--force" in sys.argv else (load(d, "words.json") or {})
-    m = whisper_model(model_name)
+    m = asr_model(cfg, d, model_name)
+    print("transcribing with", getattr(m, "model", f"local faster-whisper {model_name}"))
     for c in cfg["clips"]:
         k = c["key"]
         wav(c["path"], p(d, "audio", f"{k}_48k.wav"))

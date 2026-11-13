@@ -12,7 +12,7 @@ config.json "face_box" for `wipe_bubbles.py`.
   4 px light-blue ring and shadow as PIP/SCREEN in the B-roll page, so both versions of a video match.
 - A segment with no screen file of its own (an inserted segment) plays its own picture full frame and the bubble
   hides over it: the insert already has its own face and screen.
-- --secs N: render only the first N seconds (a layout check), never the deliverable.
+- --secs N: render only the first N seconds (a layout check) to cut/preview_<tag>.mp4, never the deliverable's name.
 - --panel: the face as a portrait 3:4 panel vertically centred on the right, about a
   quarter smaller than the old bubble, and the slides card as wide as the space left of it (no --inset needed).
   Less empty space top and right than a circle in the corner.
@@ -153,7 +153,8 @@ def main():
                  f"boxborderw={int(size * 0.55)}:x=({cx - r - 20}-text_w)/2:y=h-text_h-{int(H * 0.075)}:alpha='{alpha}':enable='between(t,{t0:.3f},{t1:.3f})'[b3]")
         last = "b3"; print(f"card '{card}' {t0:.2f} -> {t1:.2f}")
     f.append(f"[{last}]format=yuv420p[vout]")
-    out = p(d, "cut", f"transitions_{tag}.mp4")
+    # a --secs layout check must never take the deliverable's name: transitions.py render picks transitions_<tag> up
+    out = p(d, "cut", f"preview_{tag}.mp4" if "--secs" in args else f"transitions_{tag}.mp4")
     cwd = os.getcwd(); os.chdir(d)
     try:
         run(["ffmpeg", "-v", "error", "-y", "-i", scr, "-i", face_in, "-loop", "1", "-i", "cut/_bubble_mask.png",

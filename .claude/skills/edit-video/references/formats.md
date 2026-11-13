@@ -62,12 +62,15 @@ setup: full-resolution face, full-resolution slides.
   matching names (`_face.` -> `_screen.` or `-face ` -> `-screen `), in recording order. A recorder that writes the
   camera, the screen and a composite per take into one folder needs no copying: `init_workspace.py <folder> --out
   <ws> --match "*-face *"` keeps only the camera files, and `--screen <folder>` finds each take's screen file there.
-- **Camera files that stop early (run this before transcribing).** A recorder's separate camera file can end ~1 s
-  before its main recording; when the last word runs into that edge, the take ends mid-word and no later gate can
-  tell, because every check only hears what the file holds. `pad_takes.py <ws> --long "<folder>/<composite glob>"`
-  prints `ENDS ON SOUND` for those takes (measured on the longer file just past the camera file's end); `--apply`
-  rebuilds them with the long file's audio and the last camera frame held. Real case: 2 of 34 takes, both missed by
-  two complete edits that passed every other check.
+- **Camera files that start late or stop early (run this before transcribing).** A recorder's separate camera file
+  can start up to ~3 s after its main recording and end ~1 s before it; when the speaker is talking at either edge,
+  the take opens or ends mid-word and no later gate can tell, because every check only hears what the file holds.
+  `pad_takes.py <ws> --long "<folder>/<composite glob>"` prints `STARTS ON SOUND` (speech in the long file before the
+  camera file begins) and `ENDS ON SOUND` (a word still sounding at its end); `--apply` rebuilds them with the long
+  file's audio, the last camera frame held at the end, and at the start either the first frame held or, with
+  `--inset x,y,w,h`, the camera's own box cut out of the composite and scaled up. Real cases: 2 of 34 takes ended
+  mid-word; on another recording 4 of 28 takes lost their first words ("Now,", "All right, so I know...") and 4 their
+  last, all missed by every later check.
 - `assemble.py <ws> --screen <screen folder>` cuts the screen track with the face's exact picture trims and syncs each
   pair by cross-correlating their audio: separate files start up to ~0.8 s apart, differently every take.
 - Then either deliverable:

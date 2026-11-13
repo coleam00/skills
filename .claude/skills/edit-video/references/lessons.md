@@ -33,9 +33,10 @@ it. When a case is not covered by a rule, reason from these.
   half, so a re-transcription still "hears" a clipped word. Place cuts with forced alignment and the waveform; use ASR
   only as a second check. A head moved by 0.1 s on Whisper's word start cut into "So" while the transcript stayed
   clean.
-- **A file can end before the word does.** Separate camera files stopped ~1 s before the main recording, and two
-  takes' last words ran into that edge. Two complete edits passed every gate with both words clipped: each check only
-  hears what the file holds. Compare the camera file's end with a longer recording of the same mic (`pad_takes.py`).
+- **A file can start after, and end before, the words do.** Separate camera files stopped ~1 s before the main
+  recording, and two takes' last words ran into that edge; on another recording they started up to 2.6 s late and four
+  takes lost their opening words. Complete edits passed every gate with the words missing: each check only hears what
+  the file holds. Compare both ends of the camera file with a longer recording of the same mic (`pad_takes.py`).
 - **A voiced burst right after a word is the word.** A tail check said a word was still sounding; it was overridden
   because a shorter re-transcription still printed the word. The burst 0.15 s later was the word's ending, and the
   word shipped cut off.

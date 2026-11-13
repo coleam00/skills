@@ -106,5 +106,5 @@ def render_push(d, cfg, tag, dur, whoosh, peak, db, load):
                               "-movflags", "+faststart", out], capture_output=True, text=True, cwd=d)
     if r.returncode: sys.exit(r.stderr[-2000:])
     print(f"{len(wins)} pushes -> {out} ({_dur(out):.3f}s, source {total:.3f}s). No room tone, no held face: transition "
-          f"joins keep plain-cut tails. Check: frames across each push (sheet.py) and the joins' audio (validate_cut.py).")
+          f"joins keep plain-cut tails. Check: frames across each push (review.py) and the joins' audio (validate_cut.py).")
     return out

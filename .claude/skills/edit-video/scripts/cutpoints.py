@@ -20,7 +20,7 @@ import os, re, subprocess, sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import HOP, bands, envelope, load, p, read_wav, save, whisper_model, ws
+from common import HOP, asr_model, bands, envelope, load, p, read_wav, save, wav, ws
 
 PRE = 0.10        # lead-in before the first sound: enough that the first consonant is not clipped
 HEAD_CAP = 0.25   # never start more than this before Whisper's first word (drops inhales)
@@ -51,6 +51,9 @@ def segments_for(cfg, words, max_pause, split_clips):
                          "hi_lim": c["dur"] if i == len(groups) - 1 else groups[i + 1][0]["s"] - 0.05})
     return segs
 
+def c_dur(cfg, k):
+    return next(c["dur"] for c in cfg["clips"] if c["key"] == k)
+
 def main():
     d, cfg = ws()
     args = sys.argv
@@ -61,12 +64,14 @@ def main():
     segs = segments_for(cfg, words, max_pause, "--split-clips" in args)
     model = None
     if use_asr:
-        model = whisper_model("large-v3")
+        model = asr_model(cfg, d)
     cache = {}
     for s in segs:
         k = s["clip"]
         if k not in cache:
-            x, sr = read_wav(os.path.join(d, "audio", f"{k}_48k.wav"))
+            src = next(c["path"] for c in cfg["clips"] if c["key"] == k)      # a clip rebuilt since transcribe.py
+            os.makedirs(os.path.join(d, "audio"), exist_ok=True)
+            x, sr = read_wav(wav(src, os.path.join(d, "audio", f"{k}_48k.wav")))   # ran: refresh its audio first
             db = envelope(x, sr); t, lo, hi = bands(x, sr)
             loud = db[db > db.max() - 60]
             cache[k] = dict(x=x, sr=sr, db=db, t=t, lo=lo, hi=hi, lvl=np.percentile(loud, 60), floor=np.percentile(db, 10),
@@ -101,18 +106,37 @@ def main():
         # ---- ASR probe: earliest robust end
         if model is not None:
             # never probe before the head: a sub-second segment at a clip's end ("Thank you.") put the window inside out
-            target = norm(w1["w"]); pts = []; c_ = max(end - 0.12, cut_in + 0.1)
+            target = norm(w1["w"]); probes = []; c_ = max(end - 0.12, cut_in + 0.1)
             while c_ <= min(hi_lim, end + 0.45):
-                tmp = p(d, "audio", "_probe.wav")
-                subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{max(cut_in, c_ - 5):.3f}", "-to", f"{c_:.3f}", "-i",
+                probes.append(c_); c_ += 0.04
+            # local Whisper: two beams must agree. A remote model (full mode) ignores beam_size, so one call per point,
+            # all points of a segment at once (one by one, a full video took ~2 hours)
+            remote = getattr(model, "remote", False)
+            beams = (1,) if remote else (5, 1)
+
+            def probe(ic, k=k, target=target):
+                i_, c = ic
+                tmp = p(d, "audio", f"_probe{i_ if remote else ''}.wav")
+                subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{max(cut_in, c - 5):.3f}", "-to", f"{c:.3f}", "-i",
                                 os.path.join(d, "audio", f"{k}_48k.wav"), "-ar", "16000", tmp], check=True)
                 ok = 0
-                for beam in (5, 1):
+                for beam in beams:
                     out, _ = model.transcribe(tmp, language=cfg.get("language", "en"), beam_size=beam, condition_on_previous_text=False)
                     toks = " ".join(x.text for x in out).split()
                     ok += bool(toks) and norm(toks[-1]) == target
-                pts.append((c_, ok == 2)); c_ += 0.04
-            robust = next((pt for i_, (pt, _) in enumerate(pts) if all(g for _, g in pts[i_:])), None)
+                return c, ok == len(beams)
+            if remote:
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(8) as ex: pts = list(ex.map(probe, enumerate(probes)))
+            else:
+                pts = [probe((0, c)) for c in probes]
+            if remote:   # one read per point varies call to call: a lone miss among good reads is noise, a clipped
+                # word fails several points in a row, so it is the earliest good point with no two misses in a row after it
+                gs = [g for _, g in pts]
+                robust = next((pt for i_, (pt, g) in enumerate(pts) if g and gs[-1]
+                               and not any(not a_ and not b_ for a_, b_ in zip(gs[i_:], gs[i_ + 1:]))), None)
+            else:
+                robust = next((pt for i_, (pt, _) in enumerate(pts) if all(g for _, g in pts[i_:])), None)
             if robust is not None: end = max(robust, end - 0.06)
             else: print(f"   WARN {s['key']}: last word '{w1['w']}' never transcribed reliably; keeping acoustic end")
         # ---- word decay: the ASR robust end sits mid-decay on falling endings ("eventually", "sessions"), so walk
@@ -125,6 +149,15 @@ def main():
         decay_end = i * HOP; q0 = i
         while i < len(db) - 1 and db[i] <= sil and (i - q0) * HOP < SIL_PAD: i += 1        # true silence, stop at breath
         cut_out = min(hi_lim, max(end + MIN_TAIL, i * HOP))
+        # a cut clamped to the file's edge never found silence there: the camera file probably starts late or stops early
+        file_end = len(db) * HOP
+        if s["hi_lim"] >= c_dur(cfg, k) - 0.01:
+            if cut_out > file_end - 0.1 and db[-int(0.05 / HOP):].max() > -50:   # still a word decaying (pad_takes ABS_TAIL)
+                print(f"   WARN {s['key']}: OUT AT FILE END: the camera file may have stopped mid-word. "
+                      f"Run pad_takes.py <ws> --long ... (--keys {k} --force if it says ok)")
+        if cut_in < 0.02 and s["lo_lim"] == 0.0:
+            print(f"   WARN {s['key']}: IN AT FILE START: the camera file may have started after you began talking. "
+                  f"Run pad_takes.py <ws> --long ... (STARTS ON SOUND)")
         s.update({"in": round(cut_in, 3), "out": round(cut_out, 3), "onset": round(onset, 3), "v_end": round(v_end, 3), "end": round(end, 3),
                   "decay_end": round(min(hi_lim, decay_end), 3), "text": " ".join(w["w"] for w in s["words"])})
         print(f"{s['key']:9} in {cut_in:7.3f}  out {cut_out:7.3f}  ({cut_out - cut_in:5.2f}s)  {s['text'][:70]}")

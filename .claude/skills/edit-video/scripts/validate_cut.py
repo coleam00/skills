@@ -15,7 +15,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import envelope, load, p, read_wav, save, whisper_model, ws, HOP
+from common import asr_model, envelope, load, p, read_wav, save, ws, HOP
 from eye_strip import font
 
 def main():
@@ -24,7 +24,7 @@ def main():
     a = p(d, "check", f"_clean_{tag}.wav")
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", vid, "-ac", "1", "-ar", "48000", a], check=True)
     x, sr = read_wav(a)
-    m = whisper_model("large-v3")
+    m = asr_model(cfg, d)
     # 1 s of silence first: a word on frame one ("And it also...") was heard as "That also", a false DIFF at the head
     from scipy.signal import resample_poly
     a16 = np.concatenate([np.zeros(16000, np.float32), resample_poly(x, 1, sr // 16000).astype(np.float32)])
