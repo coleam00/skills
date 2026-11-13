@@ -32,8 +32,9 @@ Decide from what the user gave and said. If it is not clear, ask one question.
 | Content | Steps | Read |
 |---|---|---|
 | **Clean talking-head cut** (one take or many, no graphics) | 1-5, 9 | `references/cutting.md` |
-| **Screen recording + face bubble**, stitched with scene-change transitions | 1-6, 9 (`--no-punch`) | `references/transitions.md` |
-| **Separate face and screen files per take** (face panel or bubble over the screen) | 1-5 (`--no-punch --screen <folder>`), 6 (wipes on the screen, if it changes scene), `screen_bubble.py`, 9 (`export_final.py`) | `references/formats.md`, Talking head + slides; `references/transitions.md`, Separate face and screen files |
+| **Screen recording + face bubble**, stitched with scene-change transitions (a push) | 1-6, 9 (`--no-punch`) | `references/transitions.md` |
+| **Separate face and screen files per take** (face panel or bubble over the screen) | 1-5 (`--no-punch --screen <folder>`), `screen_bubble.py`, 6 (a push on the composite, if it changes scene), 9 (`export_final.py`) | `references/formats.md`, Talking head + slides; `references/transitions.md`, Separate face and screen files |
+| **Same, with animated inserts where the speaker leaves the slides to show the product** | 1-5 (`--no-punch --screen <folder>`), 7, `screen_spans.py`, 8 (SCREEN + PIP with `S.shot`), 9 | `references/screen-inserts.md` |
 | **Vertical Short** with captions, optional B-roll | 1-5, 7, 8, 9 | `references/captions-and-broll.md`, `references/formats.md` |
 | **Vertical Short from a stacked canvas** (screen/script on top, camera band below) | `split_wide.py`, then 1-5, 7, 8 (contiguous SPLIT beats, the band never empty), 9 | `references/formats.md`, Stacked layout |
 | **Long-form with motion-graphics B-roll** (16:9 talk, course, workshop) | 1-5, 7, 8, 9, one section first | `references/formats.md`, `references/captions-and-broll.md` |
@@ -49,6 +50,22 @@ Rarer jobs, each with its own file in `references/advanced/`: premium 3D-styled 
 (`motion-graphics-3d.md`), re-rendering a website so a locked voiceover gets new screen visuals (`dynamic-screen.md`),
 and repairing recorder audio dropouts (`audio-repair.md`).
 
+## Basic or full
+
+**Basic is the default:** everything runs on this machine and nothing leaves it. **Full** adds models through one
+OpenRouter key, and runs only when the user asks for the full pipeline or names one of its steps. Never because a key
+happens to be set: full sends the unpublished footage, and for a voice fix a sample of the speaker's voice, to outside
+providers.
+
+| Full step | What it does | Run |
+|---|---|---|
+| Transcription | Every transcription in the pipeline (first pass, cut-point checks, validation) goes to an OpenRouter model instead of the local GPU | `openrouter.py <ws> enable`, before `transcribe.py` |
+| Video review | A video model watches the export and returns timestamped notes; `--model` swaps the reviewer | `video_review.py <ws> <export>` after step 9 |
+| Thumbnail concepts | One brief, the speaker's face as a reference, several image models, the cost of each image | `thumbnails.py <ws> "<brief>"` |
+| Fixing a word | A misspoken word or line regenerated in the speaker's cloned voice and spliced in, verified by transcription | `fix_word.py <ws> <clip> <start> <end> "<line>"` (consent first) |
+
+`openrouter.py <ws> costs` prints what every call cost. Models, measured costs and the traps: `references/openrouter.md`.
+
 ## 0. Ask first (one message, then go)
 
 1. **Deliverables:** clean cut, captions, B-roll? One version or variants to compare? Burned captions or an .srt?
@@ -61,9 +78,17 @@ Then work without further check-ins until there is something to show.
 ## 1. Workspace and transcript
 
 ```
-uv run --project $S python $S/init_workspace.py "$ARGUMENTS"   # -> <folder>/_edit or <dir>/_edit_<stem>, config.json
-uv run --project $S python $S/transcribe.py <ws>                # faster-whisper large-v3, word timestamps
+uv run --project $S python $S/init_workspace.py "$ARGUMENTS" --out <ws>   # config.json; --match "<glob>" picks the camera files
+uv run --project $S python $S/pad_takes.py <ws> [--long "<glob>"]        # separate camera files: takes cut off at either end
+uv run --project $S python $S/transcribe.py <ws>                          # faster-whisper large-v3, word timestamps
 ```
+
+Pass `--out`: the default workspace is `<folder>/_edit` and finals default to `<folder>/final`, inside the source
+folder, where another edit of the same footage may already live. A recorder that writes camera, screen and composite
+files per take into one folder takes `--match` (`references/formats.md`, Talking head + slides). With separate camera
+files, `pad_takes.py` runs before transcribing: a camera file that starts late or stops early while the speaker is
+talking clips those words, and no later gate can hear it (`--apply` rebuilds those takes from the longer recording;
+`--inset x,y,w,h`, the camera's box inside it, keeps the face moving over a restored head).
 
 **Pass:** the printed transcript is read end to end. Retakes, false starts, asides and contradictions (a date or
 price said two ways) are noted. Contradictions go in the report as questions; the edit keeps what was said.
@@ -123,18 +148,20 @@ A finished segment goes in with `insert_segment.py <ws> <file> --after <segment>
 ## 6. Scene-change transitions (screen recordings)
 
 ```
-uv run --project $S python $S/transitions.py <ws> detect      # -> transitions.json + check/transition_joins.png
-uv run --project $S python $S/transitions.py <ws> room        # room tone so the whoosh sits in silence
-# re-run assemble.py + validate_cut.py with a new --tag, then:
-uv run --project $S python $S/transitions.py <ws> render --tag v2 > <ws>/transitions_v2.log
-uv run --project $S python $S/wipe_bubbles.py <ws> v2         # bubble crops across every wipe
+uv run --project $S python $S/transitions.py <ws> detect                  # -> transitions.json + check/transition_joins.png
+uv run --project $S python $S/transitions.py <ws> render --tag v1         # a push at every join -> cut/transitions_v1.mp4
 ```
 
-Separate face and screen files: `render` writes a wiped screen cut and a face cut (live, HELD, live, the switch kept
-inside the wipe); run `screen_bubble.py <ws> --tag v2 [--panel]` after it and before `wipe_bubbles.py`.
-The agent decides the joins from the contact sheet, not the threshold: only where the scene changes AND a thought
-ends. **Pass:** every remaining join is a real scene change at a sentence end; every row of the wipe-bubble sheet
-has eyes on the lens.
+The default transition is a **push**: the whole frame slides out to the right while the next clip slides in from the
+left, motion-blurred, about 0.35 s, with a quiet whoosh peaking on the picture cut. Because everything is moving, the
+speaker's glance at the record button at the end of a take, or their settling at the start of the next, cannot be
+seen: no room tone, no held face, and transition joins keep ordinary cut tails (heard pause ~0.2-0.35 s). Separate
+face and screen files: run `screen_bubble.py <ws> --tag v1 [--panel]` first, then `render`; the push moves the whole
+composite. The agent decides the joins from the contact sheet, not the threshold: only where the scene changes AND a
+thought ends. **Pass:** every remaining join is a real scene change at a sentence end; a frame strip across every push
+shows the incoming clip on the left and the outgoing on the right at mid-push (never the next screen on both halves),
+and the frames just outside each push match the untouched cut. The soft wipe (`--kind smoothleft`, with `room` and the
+bubble hold) is still available; `references/transitions.md`.
 
 ## 7. Captions
 
@@ -197,7 +224,8 @@ anything that only a human can judge (motion feel, sound) as theirs to check.
 
 - `scripts/`: the pipeline, in the order above. `doctor.py` (environment check), `align.py` (forced-alignment cut
   points), `retranscribe.py` (re-transcribe any window: a suspected repeat, a word-diff line), `insert_segment.py` (finished segments, and the post-export check around them), `split_wide.py` and
-  `screen_bubble.py` (side-by-side recordings, slides + face version), `face_track.py` (face panel follows the face),
+  `screen_bubble.py` (side-by-side recordings, slides + face version), `pad_takes.py` (camera files that start late or stop early),
+  `screen_spans.py` (where the screen leaves the slides), `face_track.py` (face panel follows the face),
   `empty_card.py` (blank-card stretches), `flicker_check.py`, `fix_skips.py` and `swap_audio.py`
   (`advanced/audio-repair.md`), `page_render.py` (`advanced/dynamic-screen.md`), `make_whoosh.py`.
   `scripts/hf/`: the HyperFrames B-roll kit (`engine.py` layouts, `scenes.py` and `motion.py` scene library,
@@ -208,6 +236,8 @@ anything that only a human can judge (motion feel, sound) as theirs to check.
 - `references/verification.md`: frame grids, word diffs, crops, every gate in one table, checking the export.
 - `references/transitions.md`: where transitions go, the face bubble across a wipe, the whoosh, ffmpeg traps.
 - `references/captions-and-broll.md`: caption rules, layouts, timing, scene catalogue, HyperFrames traps.
+- `references/screen-inserts.md`: animated product shots (`S.shot`) over the spans a recorded screen leaves the slides.
 - `references/formats.md`: vertical vs 16:9 vs long-form, recording setups, render economics.
 - `references/lessons.md`: the lessons behind the rules, grouped by topic.
+- `references/openrouter.md`: the full pipeline: models per step, what each sends out, measured costs, traps.
 - `references/advanced/`: `motion-graphics-3d.md`, `dynamic-screen.md`, `audio-repair.md`.

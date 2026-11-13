@@ -4,7 +4,9 @@ Usage: uv run --project $S python validate_cut.py <ws> [--tag v1]
 1. Re-transcribes the output and diffs it word-by-word against the source transcripts (any DIFF that is not an ASR
    spelling variant - e.g. a missing final word, "actions" -> "action" - means a tail was clipped: re-run cutpoints).
 2. For every join: silence between last sound and next sound (target 0.15-0.25 s; > 0.3 s = dead air;
-   0.0 = the cut lands on sound) and the sample jump at the cut (clicks). TAIL ON SOUND: the source is still loud at
+   0.0 = the cut lands on sound). "Silence" is 20 dB under typical speech: a word's decay above that is still the
+   word (cutpoints keeps it on purpose, and cutting it is TAIL ON SOUND). At 14 dB the gate flagged 6 of 37 joins
+   in a cut the speaker had approved and shipped, and 10 of 27 in a default edit, all of them audible decay and the sample jump at the cut (clicks). TAIL ON SOUND: the source is still loud at
    the out point and keeps sounding > 0.1 s, i.e. the last word's decay was clipped.
 3. Writes check/joins_<tag>.png: 4 frames before and after every picture cut, for the visual read.
 Writes cut/words_<tag>.json (output-timeline words) for captions.py.
@@ -15,7 +17,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import envelope, load, p, read_wav, save, whisper_model, ws, HOP
+from common import asr_model, envelope, load, p, read_wav, save, ws, HOP
 from eye_strip import font
 
 def main():
@@ -24,7 +26,7 @@ def main():
     a = p(d, "check", f"_clean_{tag}.wav")
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", vid, "-ac", "1", "-ar", "48000", a], check=True)
     x, sr = read_wav(a)
-    m = whisper_model("large-v3")
+    m = asr_model(cfg, d)
     # 1 s of silence first: a word on frame one ("And it also...") was heard as "That also", a false DIFF at the head
     from scipy.signal import resample_poly
     a16 = np.concatenate([np.zeros(16000, np.float32), resample_poly(x, 1, sr // 16000).astype(np.float32)])
@@ -45,7 +47,7 @@ def main():
         hint = (f"  (at the join @ {jn:.2f}: often a source stamp outside the segment; hear it with retranscribe.py <ws> cut:<tag>)"
                 if jn is not None and abs(jn - t) < 0.6 and op == "insert" else "")
         print(f"   DIFF {op} @ {t:.2f}: {' '.join(src[a0:a1])!r} -> {' '.join(got[b0:b1])!r}{hint}")
-    db = envelope(x, sr); thr = np.percentile(db[db > -60], 60) - 14
+    db = envelope(x, sr); thr = np.percentile(db[db > -60], 60) - 20      # below this is pause; decay above it is the word
     print("JOINS  (cut @ t | silence | click ratio)")
     bad = 0
     for s in tl[:-1]:

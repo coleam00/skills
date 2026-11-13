@@ -1,10 +1,11 @@
 # Transitions
 
-A soft wipe and a quiet whoosh where a screen recording changes scene, plus everything that keeps them invisible as
-edits. Mostly for screen recordings with a face-cam bubble; the same rules apply to any stitched recording.
+A push and a quiet whoosh where a recording changes scene, plus everything that keeps them invisible as edits. The
+same rules apply to a screen recording with a face-cam bubble, a face panel over slides, or a plain talking head.
 
 ## Contents
 - Where transitions go
+- The push (default)
 - Pacing at a transition join
 - The face bubble across a wipe
 - Separate face and screen files
@@ -25,6 +26,39 @@ edits. Mostly for screen recordings with a face-cam bubble; the same rules apply
 - `transitions.py detect` proposes joins by pixel difference, but a panel opening scores the same as a page change.
   Read `check/transition_joins.png` AND the words across each join, then edit `transitions.json` by hand. The agent
   decides, not the threshold.
+
+## The push (default)
+
+`transitions.py render` (`--kind push`, `scripts/push.py`): the whole frame slides out to the right while the next
+clip slides in from the left, locked edge to edge.
+
+| Setting | Value | Why |
+|---|---|---|
+| Length | `--dur 0.35`, rounded to whole frames | 0.30-0.45 s all read well; shorter keeps the pace |
+| Ease | smoothstep, fastest on the picture cut | the cut itself lands inside the fastest frames |
+| Motion blur | rendered at 480 fps, 8 sub-frames averaged per 60 fps frame | blending neighbouring 60 fps frames gives ghosted copies, not blur |
+| Edge holds | outgoing held from 3 frames before the cut, incoming from 3 frames after | separate screen files can switch 1-3 frames off the picture cut; holding the frame right at the cut can put the next screen on both halves (a white flash with both halves sliding the same way) |
+| Whoosh | `assets/sfx/whoosh.wav` at -6.4 dB, peak on the picture cut | the push's fastest point |
+| Where | the picture cut (timeline `v_out_start`) | a split edit moves the picture cut; anchoring to the audio cut shows a hard cut and then a transition over the same screen |
+
+**Why it is the default:** while the whole frame is moving, the speaker's glance at the record button at the end of a
+take and their settling at the start of the next cannot be seen. So there is no `room` step, no held face and no
+per-join look-away fix: transition joins keep ordinary cut tails (the last word's full decay plus ~0.08 s, ~0.15 s of
+lead-in), a heard pause of about 0.2-0.35 s. Padding a transition join with room tone makes it hang, and holding a
+large face (a panel rather than a small bubble) reads as a freeze.
+
+**Layouts:** the push moves the whole picture, so it works the same over a baked-in bubble (for a fraction of a
+second two bubbles pass each other, which reads as part of the motion), a face-panel composite and a plain talking
+head. Separate face and screen files: run `screen_bubble.py` first, then `render`; the composite is kept as
+`cut/composite_<tag>.mp4` so a re-render never pushes an already-pushed file. A `"card"` in transitions.json is drawn
+ending as that join's push starts.
+
+**Check every push:** a frame strip across each one (incoming on the left and outgoing on the right at mid-push, never
+the next screen on both halves), the frames just outside each window equal to the untouched cut, and
+`validate_cut.py` for the tails.
+
+Everything from "Pacing at a transition join" to "Wipe speed and style" below is the **soft wipe**
+(`--kind smoothleft`): its room tone, its pause centring and its bubble hold do not apply to the push.
 
 ## Pacing at a transition join
 
@@ -54,11 +88,15 @@ Set `"bubble": [cx, cy, r]` in config.json (measured on a full-resolution crop) 
 - **Check every wipe, every time:** save render's output to `<ws>/transitions_<tag>.log`, run
   `wipe_bubbles.py <ws> <tag>`, and read every row. The look-away is invisible at contact-sheet scale; only the crop
   shows it. This is the most repeated failure of the stitch edit.
-- No push or slide transitions over a baked-in bubble: a push slides a second copy of the face across. The soft wipe
-  (`xfade smoothleft`) keeps content in place, and the bubble is overlaid from the untouched cut so it never moves.
+- (Soft wipe only.) The wipe keeps content in place, and the bubble is overlaid from the untouched cut so it never
+  moves. The push instead moves everything, bubble included, which is why it needs none of this section.
 - Mask the bubble out of every frame-difference measurement, or a talking face reads as a scene change.
 
 ## Separate face and screen files
+
+**This section is the soft wipe (`--kind smoothleft`).** For the default push the order is shorter: `detect`, then
+`screen_bubble.py <ws> --tag <tag> --panel`, then `render --tag <tag>` (it pushes the whole composite; no `room`, no
+re-assemble, no `wipe_bubbles.py`). See "The push (default)" above.
 
 A recorder that writes the camera and the screen as separate files per take (`assemble.py --screen`) gets the same
 wipe, applied where it belongs:

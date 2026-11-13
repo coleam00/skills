@@ -80,7 +80,7 @@ caps it by trimming the tail first, never into the decay.
 |---|---|
 | Plain cut, mid-thought | 0.15-0.25 s |
 | A sentence ends and the next clip opens a new thought | top of that range, ~0.25-0.3 s; never above ~0.3 s |
-| Transition join (step 6) | 0.5-0.8 s, so the whoosh sits in silence |
+| Transition join (step 6, the push) | same as a plain cut: the push hides the edges, the whoosh peaks on the cut. Only the legacy soft wipe needs 0.5-0.8 s |
 
 - Under 0.1 s the speaker sounds rushed; over 0.3 s reads as dead air (0.34 s at a section end was too much).
 - "Clipped" and "too long" are different fixes: a word that sounds cut needs its decay kept, never extra silence.

@@ -33,6 +33,15 @@ it. When a case is not covered by a rule, reason from these.
   half, so a re-transcription still "hears" a clipped word. Place cuts with forced alignment and the waveform; use ASR
   only as a second check. A head moved by 0.1 s on Whisper's word start cut into "So" while the transcript stayed
   clean.
+- **A word's decay is not dead air.** validate_cut once counted everything 14 dB under speech as silence, so it flagged
+  6 of 37 joins in a cut the speaker had approved and shipped, and 10 of 27 in a default edit: all audible decay that
+  cutpoints keeps on purpose and that TAIL ON SOUND forbids cutting, so an agent went round in circles between the two
+  flags. At 20 dB under speech the shipped cut has 1 borderline join, and 0.6 s of planted room tone or a real breath
+  at a join still reads 0.67-0.80 s.
+- **A file can start after, and end before, the words do.** Separate camera files stopped ~1 s before the main
+  recording, and two takes' last words ran into that edge; on another recording they started up to 2.6 s late and four
+  takes lost their opening words. Complete edits passed every gate with the words missing: each check only hears what
+  the file holds. Compare both ends of the camera file with a longer recording of the same mic (`pad_takes.py`).
 - **A voiced burst right after a word is the word.** A tail check said a word was still sounding; it was overridden
   because a shorter re-transcription still printed the word. The burst 0.15 s later was the word's ending, and the
   word shipped cut off.
@@ -72,6 +81,11 @@ it. When a case is not covered by a rule, reason from these.
 - **Both sides of a wipe pause look away.** Switching the bubble at the wipe midpoint still showed a look-away three
   times in one video; live, held, live (only the last ~0.3 s of the incoming pre-roll) fixed it.
 - **Small steps on speed.** 0.40 s wipes read slow, 0.34 s is right, under ~0.30 s reads as a jump cut with a sound.
+- **Hiding the edges beats repairing them.** Room tone, held faces and per-join look-away fixes kept failing at
+  transitions, worst with a large face panel, where the padding read as dead air and the hold as a freeze. A push
+  moves the whole frame, so the edges of each take cannot be seen and the joins keep plain-cut tails.
+- **Hold the edge frame a few frames away from the cut.** Separate screen files switch 1-3 frames off the picture
+  cut; the frame right at the cut can already show the next screen, which puts it on both halves of a push.
 - **Subtle sound.** Six audition rounds converged on short, airy, mid-low noise about -30 dB in the pause. Audition
   side by side on the same picture, never swap blind.
 
@@ -80,6 +94,10 @@ it. When a case is not covered by a rule, reason from these.
 - **Captions are verbatim.** Fix spellings, never paraphrase; an approved caption style stays locked.
 - **Graphics land on the spoken word, never before it.** Anything said later is not on screen yet, not even greyed.
 - **Dwell long enough to read.** Half-second graphics were "barely shown": 1.5-3 s after the main visual lands.
+- **Product inserts fit the recording and carry no labels.** A headline over every product shot, and marks drawn
+  through lines of code, were the first things rejected; the voice says where we are, and a ring says what to look at.
+  Inserts placed on the words instead of the take joins showed the wrong take's raw screen for a few frames at every
+  boundary, read as glitches (`screen-inserts.md`).
 - **No machine-made tells.** "fig. 1" labels, 01/02/03 numbering, stamps, badges, icon chips, cards in cards and one
   fade-up for everything were called out as obviously generated.
 - **Specific beats generic.** With the sound off, a viewer should name the idea. A real terminal with the real

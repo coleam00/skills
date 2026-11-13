@@ -106,6 +106,11 @@ def main():
         code, out = sh([npx, "-y", f"hyperframes@{pin}" if pin else "hyperframes", "--version"], timeout=300)
         row("OK" if code == 0 else "WARN", "hyperframes", out.strip().splitlines()[-1][:70] if out.strip() else "no output")
     row("OK" if shutil.which("uv") else "WARN", "uv", shutil.which("uv") or "not found", "" if shutil.which("uv") else "https://docs.astral.sh/uv/")
+    try:                                       # the full pipeline only; basic needs no key
+        import openrouter; openrouter.api_key(); key = True
+    except (SystemExit, Exception): key = False
+    row("OK" if key else "INFO", "OpenRouter key", "found (full pipeline available)" if key else
+        "not set: basic only (everything local); the full pipeline needs it", "OPENROUTER_API_KEY in the environment or scripts/.env")
 
     w = max(len(r[1]) for r in ROWS)
     for state, name, detail, fix in ROWS:

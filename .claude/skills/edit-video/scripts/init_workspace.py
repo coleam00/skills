@@ -1,13 +1,16 @@
 """Create the edit workspace for a video or a folder of clips.
 
-Usage: python init_workspace.py <video-file | folder-of-clips> [--out <workspace>] [--no-sync]
+Usage: python init_workspace.py <video-file | folder-of-clips> [--out <workspace>] [--match "<glob>"] [--no-sync]
 
-- Folder: every video file in it is a clip, ordered by the number in its name (1.mkv, 2.mkv, ... or take_03.mp4).
+- Folder: every video file in it is a clip, ordered by the numbers in its name (1.mkv, 2.mkv, ... take_03.mp4, or a
+  recorder's date-time stamp). --match keeps only the files whose name matches the glob: a recorder that writes the
+  camera, the screen and a composite per take into one folder needs --match "*-face *" (or whatever names its camera
+  files), and assemble.py --screen <that folder> then finds each take's screen file by name.
 - Single file: one long source; cutpoints.py later splits it into segments at long pauses.
 Creates <input>/_edit (or <file-dir>/_edit_<stem>) with config.json, syncs the skill's one shared Python environment
 (scripts/.venv, from scripts/pyproject.toml), and prints the detected format. Never touches the source files.
 """
-import glob, json, os, re, subprocess, sys
+import fnmatch, glob, json, os, re, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -16,8 +19,9 @@ from common import probe, save
 VIDEO_EXT = (".mp4", ".mov", ".mkv", ".m4v", ".webm", ".avi")
 
 def order_key(path):
+    # every number, not just the first: in "Cam 2026-11-10 10-24-12" the first is the year, the same for every take
     nums = re.findall(r"\d+", os.path.basename(path))
-    return (int(nums[0]) if nums else 1 << 30, os.path.basename(path).lower())
+    return (tuple(int(n) for n in nums) if nums else (1 << 30,), os.path.basename(path).lower())
 
 def main():
     args = sys.argv[1:]
@@ -25,7 +29,9 @@ def main():
     src = os.path.abspath(args[0]); out = None
     if "--out" in args: out = os.path.abspath(args[args.index("--out") + 1])
     if os.path.isdir(src):
-        clips = sorted([f for f in glob.glob(os.path.join(src, "*")) if f.lower().endswith(VIDEO_EXT)], key=order_key)
+        pat = args[args.index("--match") + 1] if "--match" in args else "*"
+        clips = sorted([f for f in glob.glob(os.path.join(src, "*")) if f.lower().endswith(VIDEO_EXT)
+                        and fnmatch.fnmatch(os.path.basename(f).lower(), pat.lower())], key=order_key)
         out = out or os.path.join(src, "_edit")
     else:
         clips = [src]; out = out or os.path.join(os.path.dirname(src), "_edit_" + os.path.splitext(os.path.basename(src))[0])
@@ -58,6 +64,9 @@ def main():
     if cfg.get("layout"): L = cfg["layout"]; print(f"layout    {L['mode']}: the {w}x{h} camera band at native size in a {L['w']}x{L['h']} canvas, face {L.get('face_side', 'bottom')} (layout.json)")
     for c in cfg["clips"]: print(f"   {c['key']}  {c['dur']:7.2f}s  {os.path.basename(c['path'])}{'' if c['audio'] else '  (NO AUDIO)'}")
     if odd: print("WARN clips with a different size/fps (they will be conformed):", odd)
+    names = " ".join(os.path.basename(c).lower() for c in clips)
+    if "--match" not in args and any(k in names for k in ("face", "cam")) and "screen" in names:
+        print('WARN camera AND screen files in one folder became clips: re-run with --match "<camera file glob>"')
 
 if __name__ == "__main__":
     main()

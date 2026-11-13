@@ -346,6 +346,69 @@ def hub(tk, sid, box, center, items, t0, title_html=None, t_title=None, t_ring=N
         tk.add(f"tl.fromTo('#{sid}ring',{{attr:{{'stroke-dashoffset':1}}}},{{attr:{{'stroke-dashoffset':0}},duration:1.0,ease:'power2.inOut',immediateRender:false}},{t_ring:.3f});")
     return _scene(sid, "".join(out))
 
+def shot(tk, sid, box, img, t0, crop=None, zooms=(), rings=(), spots=(), swaps=(), label=None):
+    """A real screenshot (a frame grabbed from the screen recording) in a plain window, the camera pushing in on what is
+    being said: the product-demo insert (references/screen-inserts.md). Rects are (x, y, w, h) in the image's pixels.
+    crop:  the opening framing (default: the whole image).
+    zooms: [(t, rect)] the camera eases onto rect at t (0.9 s). It never zooms past 1.9x the capture's own pixels (soft
+           beyond that) and never leaves the image, so a held frame never slices text at its edge.
+    rings: [(t, rect)] an accent ring draws on around rect at t; its line stays the same width at any zoom.
+    spots: [(t0, t1, rect)] everything but rect dims to half from t0 to t1, for the one thing that matters.
+    swaps: [(t, img)] crossfade to the next capture of the same page at t (a state change: Approved, a new row).
+    label: an optional window title. No headlines, place labels or badges on top: the voice already says where we are."""
+    from PIL import Image
+    t_ = tk.T; x, y, w, h = box; IW, IH = Image.open(img).size
+    cx, cy, cw, ch = crop or (0, 0, IW, IH); bar = 38
+    s0 = min(w / cw, (h - bar) / ch); iw, ih = round(cw * s0), round(ch * s0)
+    wx, wy = x + (w - iw) // 2, y + (h - bar - ih) // 2
+
+    def state(r):  # translate + scale of the image so that rect r fills the window, clamped to the image
+        rx, ry, rw, rh = r; sc = min(max(min(iw / rw, ih / rh), iw / IW, ih / IH), 1.9)
+        ox = min(0, max(iw - IW * sc, -rx * sc + (iw - rw * sc) / 2)); oy = min(0, max(ih - IH * sc, -ry * sc + (ih - rh * sc) / 2))
+        return round(ox, 2), round(oy, 2), round(sc, 5)
+
+    def scale_at(t):
+        sc = state((cx, cy, cw, ch))[2]
+        for tz, r in zooms:
+            if tz <= t: sc = state(r)[2]
+        return sc
+
+    dots = "".join(f'<span style="width:12px;height:12px;border-radius:50%;background:{c};display:inline-block;margin-right:8px"></span>'
+                   for c in ("#F87171", "#FBBF24", "#34D399"))
+    ttl = f'<span style="margin-left:10px;font-family:\'{t_["font"]}\';font-weight:600;font-size:16px;color:#3B4252">{label}</span>' if label else ""
+    out = [f'<div class="a" id="{sid}w" style="left:{wx}px;top:{wy}px;width:{iw}px;height:{ih + bar}px;border-radius:14px;overflow:hidden;'
+           f'background:#E9ECF1;box-shadow:0 22px 60px rgba(0,0,0,.55),0 0 0 1px rgba(148,163,184,.25)">'
+           f'<div style="position:absolute;left:0;top:0;right:0;height:{bar}px;display:flex;align-items:center;padding:0 16px;box-sizing:border-box">{dots}{ttl}</div>'
+           f'<div style="position:absolute;left:0;top:{bar}px;width:{iw}px;height:{ih}px;overflow:hidden">'
+           f'<div id="{sid}cam" style="position:absolute;left:0;top:0;width:{IW}px;height:{IH}px;transform-origin:0 0">'
+           f'<img src="{tk.asset(img)}" style="position:absolute;left:0;top:0;width:{IW}px;height:{IH}px">']
+    for k, (t, im) in enumerate(swaps):
+        out.append(f'<img id="{sid}s{k}" src="{tk.asset(im)}" style="position:absolute;left:0;top:0;width:{IW}px;height:{IH}px;opacity:0">')
+    for k, (a, b, (rx, ry, rw, rh)) in enumerate(spots):
+        out.append(f'<div id="{sid}p{k}" style="position:absolute;left:{rx - 8}px;top:{ry - 8}px;width:{rw + 16}px;height:{rh + 16}px;'
+                   f'border-radius:12px;box-shadow:0 0 0 {IW + IH}px rgba(5,8,15,.5);opacity:0"></div>')
+    for k, (t, (rx, ry, rw, rh)) in enumerate(rings):
+        sw = 5 / scale_at(t); pd = 10 / scale_at(t)
+        out.append(f'<svg class="mark" id="{sid}r{k}" style="left:{rx - pd:.0f}px;top:{ry - pd:.0f}px;width:{rw + 2 * pd:.0f}px;height:{rh + 2 * pd:.0f}px">'
+                   f'<rect x="{sw / 2:.1f}" y="{sw / 2:.1f}" width="{rw + 2 * pd - sw:.1f}" height="{rh + 2 * pd - sw:.1f}" rx="{12 / scale_at(t):.1f}" '
+                   f'pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" fill="none" stroke="{t_["accent"]}" stroke-width="{sw:.1f}"/></svg>')
+    out.append("</div></div></div>")
+    a = state((cx, cy, cw, ch)); t_in = max(t0 + 0.1, tk.ready)
+    tk.add(f"tl.set('#{sid}cam',{{x:{a[0]},y:{a[1]},scale:{a[2]}}},0);")
+    tk.add(f"tl.fromTo('#{sid}w',{{opacity:0,y:30,scale:0.97}},{{opacity:1,y:0,scale:1,duration:0.5,ease:'power3.out',immediateRender:false}},{t_in:.3f});")
+    tk.key(sid, t_in + 0.5); prev = a
+    for t, r in zooms:
+        b = state(r)
+        tk.add(f"tl.fromTo('#{sid}cam',{{x:{prev[0]},y:{prev[1]},scale:{prev[2]}}},{{x:{b[0]},y:{b[1]},scale:{b[2]},duration:0.9,ease:'power2.inOut',immediateRender:false}},{max(t, t_in + 0.5):.3f});")
+        prev = b
+    for k, (t, _) in enumerate(rings):
+        tk.add(f"tl.fromTo('#{sid}r{k} rect',{{attr:{{'stroke-dashoffset':1}}}},{{attr:{{'stroke-dashoffset':0}},duration:0.55,ease:'power2.inOut',immediateRender:false}},{max(t, t_in + 0.5):.3f});")
+    for k, (a_, b_, _) in enumerate(spots):
+        fade(tk, f"#{sid}p{k}", max(a_, t_in + 0.5), 0.35); tk.add(f"tl.to('#{sid}p{k}',{{opacity:0,duration:0.35}},{b_:.3f});")
+    for k, (t, _) in enumerate(swaps):
+        fade(tk, f"#{sid}s{k}", max(t, t_in + 0.5), 0.35)
+    return _scene(sid, "".join(out))
+
 def image_cta(tk, sid, box, img, url, t0, t1):
     """A screenshot on a card plus the URL typed underneath and highlighted (for 'the link I have on screen')."""
     x, y, w, h = box; u = unit(box); fs = round(42 * u)

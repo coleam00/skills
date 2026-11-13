@@ -3,7 +3,13 @@
 Usage:
   uv run --project $S python transitions.py <ws> detect [--threshold 6]   # which clip joins change scene
   uv run --project $S python transitions.py <ws> room [--tail 0.45] [--head 0]  # widen those joins (edits cuts.json)
-  uv run --project $S python transitions.py <ws> render [--tag v1] [--dur 0.34] [--whoosh-db -6.4] [--sfx file --sfx-peak s] [--kind smoothleft]
+  uv run --project $S python transitions.py <ws> render [--tag v1] [--kind push|smoothleft] [--dur 0.35] [--whoosh-db -6.4] [--sfx file --sfx-peak s]
+
+DEFAULT: --kind push (scripts/push.py): the whole frame slides out right, the next clip slides in from the left,
+motion-blurred, whoosh peaking on the PICTURE cut. No `room` step and no held face: transition joins keep plain-cut
+tails (~0.2-0.35 s heard pause). Separate face + screen files: run screen_bubble.py first; the push moves the
+composite. Everything below about room tone, centring in the pause, the bubble hold and wiped face/screen cuts is the
+legacy soft wipe (--kind smoothleft).
 
 Rules (references/transitions.md): only at clip joins where the SCREEN changes, never at a tab switch inside one
 clip, never at a join that stays on the same screen. The whoosh is quiet and lands in silence, never over a word,
@@ -52,10 +58,17 @@ def bubble_mask(cfg, w, h):
         m[max(int((cy - r) * sy), 0):, max(int((cx - r) * sx), 0):] = False
     return m
 
+def grab(path, t, vf, pix, nbytes):
+    """One raw frame at t; past the file's end (a padded take's out point beyond its screen file), its last frame,
+    which is what assemble.py holds there."""
+    cmd = lambda pos: ["ffmpeg", "-v", "error"] + pos + ["-i", path, "-frames:v", "1", "-vf", vf, "-f", "rawvideo",
+                                                         "-pix_fmt", pix, "-"]
+    r = subprocess.run(cmd(["-ss", f"{max(t, 0):.4f}"]), capture_output=True).stdout
+    if len(r) < nbytes: r = subprocess.run(cmd(["-sseof", "-0.25"]), capture_output=True).stdout
+    return r[:nbytes]
+
 def frame(path, t, w=192, h=108):
-    r = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{max(t, 0):.4f}", "-i", path, "-frames:v", "1", "-vf",
-                        f"scale={w}:{h},format=gray", "-f", "rawvideo", "-"], capture_output=True).stdout
-    return np.frombuffer(r, np.uint8).reshape(h, w).astype(np.float32)
+    return np.frombuffer(grab(path, t, f"scale={w}:{h}", "gray", w * h), np.uint8).reshape(h, w).astype(np.float32)
 
 def detect(d, cfg):
     segs = load(d, "cuts.json")["segments"]; thr = arg("--threshold", 6.0); m = bubble_mask(cfg, 192, 108); joins = []; every = []
@@ -78,9 +91,7 @@ def detect(d, cfg):
     # contact sheet: the agent must READ it and drop joins that stay on the same screen (scroll, panel, popover)
     from PIL import Image, ImageDraw
     def rgb(p, t):
-        r = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{max(t, 0):.4f}", "-i", p, "-frames:v", "1", "-vf", "scale=480:270",
-                            "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], capture_output=True).stdout
-        return Image.frombytes("RGB", (480, 270), r)
+        return Image.frombytes("RGB", (480, 270), grab(p, t, "scale=480:270", "rgb24", 480 * 270 * 3))
     # every join, not only the candidates: a missed scene change (and "0 candidates") must be checked by eye too
     if every:
         sheet = Image.new("RGB", (960, 270 * len(every)), "black"); dr = ImageDraw.Draw(sheet)
@@ -132,7 +143,11 @@ def dur(path):
 
 def render(d, cfg):
     global D
-    tag = arg("--tag", "v1"); db = arg("--whoosh-db", -6.4); kind = arg("--kind", "smoothleft"); fps = cfg["fps"]; D = arg("--dur", D)
+    tag = arg("--tag", "v1"); db = arg("--whoosh-db", -6.4); kind = arg("--kind", "push"); fps = cfg["fps"]
+    if kind == "push":
+        import push
+        return push.render_push(d, cfg, tag, arg("--dur", 0.35), arg("--sfx", ASSET), arg("--sfx-peak", PEAK), db, load)
+    D = arg("--dur", D)
     # separate face and screen files: the wipe belongs on the SCREEN cut, and the face track (composed later by
     # screen_bubble.py as a bubble or panel) gets the live, HELD, live switch over its whole frame
     sep = bool((cfg.get("screen_cuts") or {}).get(tag)) and not cfg.get("bubble")

@@ -67,6 +67,14 @@ def whisper_model(name="large-v3"):
             print("CUDA model load failed, using CPU int8:", str(e)[:160])
     return WhisperModel(name, device="cpu", compute_type="int8")
 
+def asr_model(cfg, d, name="large-v3"):
+    """The transcriber every script uses. Basic (default): local faster-whisper. Full (openrouter.py <ws> enable):
+    the OpenRouter transcription model, same interface, nothing loaded on this machine's GPU."""
+    if (cfg.get("openrouter") or {}).get("full"):
+        from openrouter import Transcriber
+        return Transcriber(d, cfg)
+    return whisper_model(name)
+
 FONT_DIRS = [os.path.join(os.environ.get("WINDIR", os.environ.get("SystemRoot", "")), "Fonts"), "/System/Library/Fonts", "/System/Library/Fonts/Supplemental", "/Library/Fonts",
              os.path.expanduser("~/Library/Fonts"), "/usr/share/fonts", "/usr/local/share/fonts", os.path.expanduser("~/.fonts"),
              os.path.expanduser("~/.local/share/fonts")]
