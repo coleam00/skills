@@ -33,6 +33,7 @@ MIN_TAIL = 0.06   # always keep at least this after the robust end (word decay)
 JOIN_MAX = 0.25   # pause budget per join (tail pad + next head lead-in); above ~0.4 s heard reads as dead air
 
 norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
+PHANTOM = {"thankyou", "thanks", "thanksforwatching", "thankyouforwatching", "thankyouverymuch", "bye", "you"}
 
 def segments_for(cfg, words, max_pause, split_clips):
     segs = []
@@ -79,6 +80,18 @@ def main():
         a = cache[k]; db, t, lo, hi = a["db"], a["t"], a["lo"], a["hi"]
         idx = lambda sec: int(np.clip(sec / HOP, 0, len(db) - 1))
         tid = lambda sec: int(np.clip(np.searchsorted(t, sec), 0, len(t) - 1))
+        # Whisper invents a sign-off ("Thank you.") in the silence at the end of a take; the tail would then run
+        # through that silence. Drop it only when it follows a pause AND the audio under it is near the room.
+        ws_ = s["words"]
+        for n in (3, 2, 1):
+            if len(ws_) > n and ws_[-n]["s"] - ws_[-n - 1]["e"] > 0.25 and \
+                    "".join(norm(w["w"]) for w in ws_[-n:]) in PHANTOM:
+                span = db[idx(ws_[-n]["s"]):idx(ws_[-1]["e"]) + 1]
+                if len(span) and np.percentile(span, 90) < a["lvl"] - 25:
+                    print(f"   {s['key']}: dropped a trailing '{' '.join(w['w'] for w in ws_[-n:])}' "
+                          f"(silence under it: the transcriber invented it)")
+                    s["words"] = ws_[:-n]
+                break
         w0, w1 = s["words"][0], s["words"][-1]
         # ---- head
         thr = a["lvl"] - 16; kk = int(0.04 / HOP)
