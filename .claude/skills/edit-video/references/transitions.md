@@ -24,7 +24,7 @@ same rules apply to a screen recording with a face-cam bubble, a face panel over
   switch is the classic overdone first draft.
 - A join that stays on the same screen (a scroll, a panel opening, a popover) is a plain cut.
 - `transitions.py detect` proposes joins by pixel difference, but a panel opening scores the same as a page change.
-  Read `check/transition_joins.png` AND the words across each join, then edit `transitions.json` by hand. The agent
+  Read every `check/transition_joins_N.png` page (6 joins each) AND the words across each join, then edit `transitions.json` by hand. The agent
   decides, not the threshold.
 
 ## The push (default)

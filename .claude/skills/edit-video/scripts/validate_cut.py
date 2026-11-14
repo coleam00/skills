@@ -48,6 +48,18 @@ def main():
                 if jn is not None and abs(jn - t) < 0.6 and op == "insert" else "")
         print(f"   DIFF {op} @ {t:.2f}: {' '.join(src[a0:a1])!r} -> {' '.join(got[b0:b1])!r}{hint}")
     db = envelope(x, sr); thr = np.percentile(db[db > -60], 60) - 20      # below this is pause; decay above it is the word
+    # A deliberate splice inside a take (overrides.json "splice": a false start like "ex-" cut out of "ex-expect")
+    # often lands on sound by design: it joins two parts of one word or phrase. It used to be flagged ON SOUND plus
+    # TAIL ON SOUND on every run (Fable c25, 11/12 and 11/13) and cost the agent a re-check each time. Such a join is
+    # marked SPLICE and checked by ear and by the word diff instead; it is not counted as a flag.
+    ov = load(d, "overrides.json", default={}) or {}
+    def is_splice(s, nxt):
+        if nxt is None or nxt["clip"] != s["clip"]: return False
+        for rngs in (ov.get("splice") or {}).values():
+            for a0, b0 in rngs:
+                if abs(a0 - s["a_out"]) < 0.08 and abs(b0 - nxt["a_in"]) < 0.08: return True
+        return False
+    spl = {s["key"] for s, nxt in zip(tl, tl[1:]) if is_splice(s, nxt)}
     print("JOINS  (cut @ t | silence | click ratio)")
     bad = 0
     for s in tl[:-1]:
@@ -58,7 +70,9 @@ def main():
         gap = (b_ - a_) * HOP; k = int(t * sr); seg = x[max(0, k - 240):k + 240]
         jump = np.abs(np.diff(seg)).max() / (np.abs(np.diff(x[max(0, k - 4800):k - 240])).mean() + 1e-9)
         flag = "DEAD AIR" if gap > 0.3 else ("ON SOUND" if gap < 0.03 else "")
-        bad += bool(flag)
+        if s["key"] in spl:
+            flag = "SPLICE (overrides.json, inside a take: check it in the word diff and by ear, not a flag)"
+        else: bad += bool(flag)
         print(f"  {s['key']:9} @ {t:7.2f} | {gap:5.3f}s | {jump:5.1f}x  {flag}")
     # A clipped decay hides from the pause measure above (the cut is followed by silence either way), so read the
     # SOURCE at each out point: still loud in the last 30 ms and sounding on for > 0.1 s means the word was cut
@@ -70,7 +84,7 @@ def main():
         e, room = env[s["clip"]]; i = int(s["a_out"] / HOP); j = i
         last = e[max(0, i - int(0.03 / HOP)):i].mean()
         while j < len(e) - 1 and e[j] > room: j += 1
-        if last > room + 12 and (j - i) * HOP > 0.1:
+        if last > room + 12 and (j - i) * HOP > 0.1 and s["key"] not in spl:
             bad += 1; print(f"  {s['key']:9} TAIL ON SOUND: {last:.0f} dB at the cut, word sounds {(j - i) * HOP:.2f}s past it (move out to ~{j * HOP:.2f})")
     print(f"{bad} joins flagged")
     # per-segment integrated loudness on the cut: a spread over ~1.5 LU means re-assemble with --level

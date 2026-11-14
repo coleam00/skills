@@ -95,3 +95,15 @@ Unpublished footage and a voice sample are the user's to send. A voice fix needs
 
 `openrouter.py <ws> costs` totals `costs.jsonl` by step and model. A call whose cost was not reported counts as 0
 and is flagged.
+
+Measured on a 16-minute video (Fable 5.2 guide, 28 takes):
+- One clean pass with the defaults (transcription, cut checks, one review): about $0.45; transcription alone $0.23.
+- A real edit with three rebuilt versions, four reviews, eight thumbnail concepts and a voice fix: $2.58
+  (transcription $1.24 over 2,368 calls, because the cut-point and validate checks run again after every fix;
+  reviews $0.84; thumbnails $0.50; voice under a cent).
+- Three Shorts cut from it, with two fix rounds and ten reviews: $0.13.
+
+The video review is a lead, not a verdict. On that edit it caught the real problems (a number said wrong against the
+screen, recorder dropouts in the camera audio, a clipped diagram and a wrong last frame in a Short) and also reported
+many that were not there (transition sounds "too loud" that sat in pauses, a misread number under the mouse pointer,
+a "path leak" that was a menu). Check every note against the frames and the audio before acting on it.

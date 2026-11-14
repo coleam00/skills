@@ -41,10 +41,23 @@ def source(d, cfg, tag):
     sep = bool((cfg.get("screen_cuts") or {}).get(tag)) and not cfg.get("bubble")
     if not sep: return os.path.join(d, "cut", f"clean_{tag}.mp4")
     comp = os.path.join(d, "cut", f"composite_{tag}.mp4"); tr = os.path.join(d, "cut", f"transitions_{tag}.mp4")
+    # transitions_<tag>.mp4 is either a FRESH screen_bubble composite or this script's own pushed output. Only a
+    # fresh one replaces the kept composite: re-running screen_bubble.py after a fix and then rendering used to push
+    # the OLD composite, because the kept one always won (Fable 11/13, a corrected screen track never reached the export)
+    if os.path.exists(tr) and not _is_pushed(tr) and (not os.path.exists(comp) or os.path.getmtime(tr) > os.path.getmtime(comp)):
+        os.replace(tr, comp); print(f"  kept the fresh screen_bubble composite as {os.path.relpath(comp, d)}")
     if not os.path.exists(comp):
-        if not os.path.exists(tr): sys.exit(f"separate face + screen files: run screen_bubble.py <ws> --tag {tag} [--panel] first (the push moves the whole composite)")
-        os.replace(tr, comp); print(f"  kept the screen_bubble composite as {os.path.relpath(comp, d)}")
+        sys.exit(f"separate face + screen files: run screen_bubble.py <ws> --tag {tag} [--panel] first (the push moves the whole composite)")
     return comp
+
+
+def _stamp(f):
+    st = os.stat(f); return f"{st.st_size} {st.st_mtime_ns}"
+
+
+def _is_pushed(f):
+    m = f[:-4] + ".pushed"
+    return os.path.exists(m) and open(m).read().strip() == _stamp(f)
 
 
 def render_push(d, cfg, tag, dur, whoosh, peak, db, load):
@@ -105,6 +118,7 @@ def render_push(d, cfg, tag, dur, whoosh, peak, db, load):
                               "-preset", "medium", "-pix_fmt", "yuv420p", "-r", str(fps), "-c:a", "aac", "-b:a", "192k",
                               "-movflags", "+faststart", out], capture_output=True, text=True, cwd=d)
     if r.returncode: sys.exit(r.stderr[-2000:])
+    open(out[:-4] + ".pushed", "w").write(_stamp(out))      # marks this file as pushed: never used as a composite
     print(f"{len(wins)} pushes -> {out} ({_dur(out):.3f}s, source {total:.3f}s). No room tone, no held face: transition "
           f"joins keep plain-cut tails. Check: frames across each push (review.py) and the joins' audio (validate_cut.py).")
     return out

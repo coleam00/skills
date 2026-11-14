@@ -1,11 +1,17 @@
 """Repair recorder audio buffer skips (CPU overload) in the face clips: find and smooth, never retime.
 
-Usage: uv run --project $S python fix_skips.py <ws> [--out <dir>] [--th 8] [--report]
+Usage: uv run --project $S python fix_skips.py <ws> [--out <dir>] [--th 8] [--report] [--long "<folder>/<glob>"]
 
 What the defect is: when a screen recorder's audio thread is starved it drops whole 1024-frame buffers. Nothing
-goes silent; the waveform jumps at one sample and the speech lurches ahead, heard as a cut or stutter. It is upstream of
-the encoders, so the face, screen and composite files all carry the same skips (their mutual lag never moves), and
-zero-run, level-dip and cross-file checks all find nothing.
+goes silent; the waveform jumps at one sample and the speech lurches ahead, heard as a cut or stutter. Zero-run and
+level-dip checks find nothing. Whether every file carries the skips depends on the recorder: on one setup the face,
+screen and composite files all had them, but on another (OBS with Source Record, Fable 11/13) only the separately
+recorded camera and screen files did, and the main composite recording was clean.
+--report --long "<glob>": score each clip AND its longer recording of the same take (the composite, paired in order,
+exactly like pad_takes.py) and print both. When the long files are clean and the clips are not, do not smooth: rebuild
+every clip on the long file's audio, which RESTORES the dropped audio instead of hiding the click:
+  pad_takes.py <ws> --long "<glob>" --apply --all [--inset x,y,w,h]
+then re-run transcribe.py and cutpoints.py and compare the new outs with the old cuts.json (see cutting.md).
 How it is found: an LPC residual (order 20, fitted on the previous 20 ms) cancels normal speech; a skip is a residual
 spike far above the local level. Skips sit on the take's 1024-sample buffer grid, so the grid phase is the 3-sample
 window holding the most big spikes, and only grid boundaries are scored (score > --th in speech). Natural spikes
@@ -93,6 +99,13 @@ def main():
     th = float(args[args.index("--th") + 1]) if "--th" in args else 8.0
     out = args[args.index("--out") + 1] if "--out" in args else os.path.join(os.path.dirname(cfg["clips"][0]["path"]) + "_fixed")
     os.makedirs(out, exist_ok=True); report = {}
+    import glob
+    longs = sorted(glob.glob(args[args.index("--long") + 1])) if "--long" in args else []
+    if longs and len(longs) != len(cfg["clips"]): sys.exit(f"--long matched {len(longs)} files for {len(cfg['clips'])} clips: narrow the glob")
+    # grid concentration: how many of the big residual spikes sit on one 1024-sample phase, against the ~3/1024 that
+    # chance puts there. Speech alone stays near 1x; buffer skips stack up on the grid (the Fable camera files: up to 100x+)
+    conc = lambda sup, nb: sup / max(1.0, 3 * nb / 1024)
+    cmp_rows = []
     for c in cfg["clips"]:
         if c["key"].startswith("m"): continue                      # inserted segments were mastered separately
         a = pcm(c["path"]); hits, ph, sup, nb = find(a.mean(1), th)
@@ -105,6 +118,10 @@ def main():
                             "skips": [[round(k / SR, 4), round(s, 1), round(b, 1), round(f, 1)] for (k, s), b, f in zip(hits, before, after)]}
         print(f"{c['key']}: grid phase {ph} ({sup} of {nb} big spikes), {len(hits)} skips; step median "
               f"{np.median(before) if before else 0:.0f}x -> {np.median(after) if after else 0:.1f}x, over 10x after: {sum(f > 10 for f in after)}", flush=True)
+        if longs:
+            L = longs[cfg["clips"].index(c)]; lh, _, lsup, lnb = find(pcm(L).mean(1), th)
+            cmp_rows.append((c["key"], conc(sup, nb), len(hits), conc(lsup, lnb), len(lh)))
+            print(f"      long {os.path.basename(L)}: grid concentration {conc(lsup, lnb):.1f}x ({len(lh)} skips)  vs clip {conc(sup, nb):.1f}x", flush=True)
         if "--report" in args: continue
         wav = os.path.join(out, os.path.splitext(os.path.basename(c["path"]))[0] + "_fixed.wav")
         sf.write(wav, a, SR, subtype="FLOAT")
@@ -113,6 +130,12 @@ def main():
                         "-c:a", "flac", dst], check=True)
         os.remove(wav)
     json.dump(report, open(os.path.join(d, "skips.json"), "w"), indent=1)
+    if cmp_rows:
+        bad_clip = [r for r in cmp_rows if r[1] >= 5]; bad_long = [r for r in cmp_rows if r[3] >= 5]
+        print(f"SKIPS  clips with skips (>= 5x on the grid): {len(bad_clip)} of {len(cmp_rows)}   long files: {len(bad_long)} of {len(cmp_rows)}")
+        if bad_clip and len(bad_long) < len(bad_clip) / 3:
+            print("  -> the long recordings are clean: rebuild the clips on their audio (restores what was dropped):\n"
+                  "     pad_takes.py <ws> --long \"<same glob>\" --apply --all [--inset x,y,w,h], then transcribe.py, cutpoints.py")
 
 if __name__ == "__main__":
     main()

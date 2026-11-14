@@ -26,11 +26,15 @@ RUBRIC = """You are the final reviewer on a finished video before it is publishe
 sound. Report only real problems a viewer would notice, at most 15, most important first:
 - a word cut off at a cut (start or end clipped), a breath or dead air left at a cut, a doubled or repeated phrase
 - a jump at a cut: the face jumps, blinks, looks away or flashes for a frame; a frozen frame; a glitch at a transition
-- audio: a level jump between takes, a click, a dropout, music or sound effects too loud under speech
+- audio: a level jump between takes, a click, a dropout, music or sound effects too loud UNDER SPEECH (a transition
+  sound that sits in the pause between two sentences, with no word under it, is deliberate: do not report it)
 - graphics or captions: text appears before it is said, covers the face, is clipped at the frame edge, overlaps other
-  text, misspells a name, or sits on screen too briefly to read; a screen left empty or stale for a long time
+  text, misspells a name, or sits on screen too briefly to read; a screen left empty or stale for a long time; the
+  same words on screen twice at once (a caption repeating the text a graphic is showing at that moment); in a
+  vertical video, the top area left empty for a second or more
 - anything private on screen that should be blurred (keys, emails, phone numbers, addresses, IPs), even partly
-- the speaker saying something that contradicts what is on screen
+- the speaker saying something that contradicts what is on screen (read numbers carefully: if the mouse pointer
+  covers part of a number, or the text is too small to read, do not report a mismatch)
 Do not report style preferences or things that are deliberate (a slow section, a long screen recording).
 Return JSON only: {"notes": [{"t": "m:ss", "end": "m:ss or null", "type": "cut|audio|picture|graphics|captions|privacy|content",
 "what": "what you see or hear", "why": "why it is a problem", "fix": "the fix"}], "overall": "one sentence"}.

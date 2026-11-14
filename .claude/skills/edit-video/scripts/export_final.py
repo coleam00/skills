@@ -26,11 +26,19 @@ run(["ffmpeg", "-v", "error", "-y", "-i", src, "-vf", f"tpad=stop_mode=clone:sto
      "-af", f"apad=pad_dur={HOLD},afade=t=out:st={T - FADE:.3f}:d={FADE}", "-t", f"{T:.3f}",
      "-c:v", "libx264", "-crf", "16", "-preset", "slow", "-pix_fmt", "yuv420p", "-r", str(FPS), "-c:a", "pcm_s16le", tmp])
 j = finalize.lufs(tmp)
-ln = (f"loudnorm=I=-14:TP=-1.5:LRA=11:measured_I={j['input_i']}:measured_TP={j['input_tp']}:measured_LRA={j['input_lra']}:"
-      f"measured_thresh={j['input_thresh']}:offset={j['target_offset']}:linear=true,alimiter=limit=0.70:level=disabled:latency=1,aresample=48000")
-run(["ffmpeg", "-v", "error", "-y", "-i", tmp, "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy", "-af", ln, "-c:a", "aac", "-b:a", "192k",
-     "-movflags", "+faststart", out])
-j2 = finalize.lufs(out); lags, da, db_ = finalize.lag_ms(out, clean, ws)
+# The AAC encode adds inter-sample peaks after the limiter, so a fixed limit can land over the -1.5 dBTP gate (Fable
+# v1 11/13: -1.39 with limit 0.70). Measure the ENCODED file and step the limit down until it passes.
+part = out[:-4] + ".part.mp4"
+for lim in (0.70, 0.63, 0.56, 0.50):
+    ln = (f"loudnorm=I=-14:TP=-1.5:LRA=11:measured_I={j['input_i']}:measured_TP={j['input_tp']}:measured_LRA={j['input_lra']}:"
+          f"measured_thresh={j['input_thresh']}:offset={j['target_offset']}:linear=true,alimiter=limit={lim}:level=disabled:latency=1,aresample=48000")
+    run(["ffmpeg", "-v", "error", "-y", "-i", tmp, "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy", "-af", ln, "-c:a", "aac", "-b:a", "192k",
+         "-movflags", "+faststart", part])
+    j2 = finalize.lufs(part)
+    if float(j2["input_tp"]) <= -1.5: break
+    print(f"  true peak {j2['input_tp']} dBTP with limit {lim}: over -1.5, re-encoding with a lower limit")
+os.replace(part, out)
+lags, da, db_ = finalize.lag_ms(out, clean, ws)
 cap = load(ws, "cut", f"captions_{tag}.json")
 ts = lambda t: "%02d:%02d:%02d,%03d" % (int(t // 3600), int(t % 3600 // 60), int(t % 60), int(round((t % 1) * 1000)) % 1000)
 if cap: open(out[:-4] + ".srt", "w", encoding="utf-8").write("\n".join(f"{i + 1}\n{ts(g['s'])} --> {ts(g['e'])}\n{g['text']}\n" for i, g in enumerate(cap["groups"])))
