@@ -140,6 +140,15 @@ it. When a case is not covered by a rule, reason from these.
 - **Never capture a website live for an edit; render it frame by frame** on a controlled page clock (live capture
   dropped every other frame and played page animations several times too fast).
 - **ffmpeg crops clamp silently at the frame edge.** A bubble landed 4 px off with a ring of background around it.
+- **Two `tpad` filters in a row lose frames.** A screen segment that needed a head pad and a tail hold came out 3-6
+  frames short, and every later screen segment ran early (push 4 showed the old page on both halves). One `tpad`
+  carries both; assemble.py now checks the screen track's frame count against the face cut.
+- **A kept render must never win over a newer one.** The push step kept `composite_<tag>.mp4` forever, so a
+  corrected screen_bubble composite never reached the export; push.py now marks its own outputs and takes a fresh one.
+- **Measure true peak on the ENCODED file.** AAC adds inter-sample peaks after the limiter (-1.39 dBTP with limit
+  0.70); export_final.py now steps the limit down until the export passes.
+- **Recorder skips can live in the camera file only.** OBS Source Record dropped audio buffers in the camera and screen
+  files while the composite stayed clean: rebuild on the composite audio instead of smoothing (fix_skips --report --long).
 
 ## Process
 

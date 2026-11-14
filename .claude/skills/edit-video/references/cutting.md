@@ -15,6 +15,7 @@ How `cutpoints.py` decides where every segment starts and ends, how to correct i
 - Split edits and punch-ins
 - Levels between clips
 - Inserts (a finished segment)
+- After an audio swap
 - Failure table
 
 ## The two ways a cut goes wrong
@@ -165,6 +166,15 @@ each source clip before, inside and after the insert. The export's own sync prob
 it reads 0.0 ms even when everything after an insert is 17 ms early; this check is the only one that catches it. Fix
 any lag by adding or trimming that much room tone in the pause after the insert. Place an insert where a section
 ends and the next opens with its own setup line, never mid-argument.
+
+## After an audio swap
+
+Rebuilding the clips on another recording's audio (`pad_takes.py --all` when the camera files carry recorder skips and
+the composite does not, see `fix_skips.py --report --long`) changes the waveform every tail is measured on. On the
+Fable takes (11/13) cutpoints then moved 5 out points: 2 into the last word, 3 leaving long pauses. Keep the old
+`cuts.json` before re-running, and for every out point that moved by more than 0.1 s, put back the old one shifted by
+the clip's new `head_padded` and confirm it with `align.py <ws> <seg> tail`. Then re-run the voice fix (it was
+generated against the old audio) and validate.
 
 ## Failure table
 

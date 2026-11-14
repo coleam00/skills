@@ -1,6 +1,6 @@
 """Assemble the clean cut from cuts.json: trims, split edits, alternating punch-in, micro-fades, loudness.
 
-Usage: uv run --project $S python assemble.py <ws> [--no-punch] [--level] [--tag v1]
+Usage: uv run --project $S python assemble.py <ws> [--no-punch] [--level] [--tag v1] [--screen [file|folder] [--screen-native]]
 - Level (--level): gain every segment to the median segment loudness before the final loudnorm. Use it when clips
   come from different sessions or include a pre-mastered insert (an ad read, an intro); check per-segment LUFS after.
 - Punch-in: the face size is measured per clip (faces.json, written here on first run) and every cut alternates
@@ -80,6 +80,7 @@ def cut_screen(d, cfg, tl, tag, args):
     Each screen file is shifted by its measured lag (config.json "screen_lags", cached by file name)."""
     W, H, fps = cfg["w"], cfg["h"], cfg["fps"]; i = args.index("--screen")
     val = args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("--") else None
+    SW, SH = W, H
     lags = cfg.setdefault("screen_lags", {})
     if val: cfg["screen_from"] = os.path.abspath(val)      # transitions.py detect compares these screen files, not the faces
     srcs, fv, sdur = [], [], {}
@@ -89,19 +90,26 @@ def cut_screen(d, cfg, tl, tag, args):
         if sp != s["path"] and os.path.basename(sp) not in lags:
             lags[os.path.basename(sp)] = round(screen_lag(s["path"], sp), 4)
             print(f"  screen lag {os.path.basename(sp)}: {lags[os.path.basename(sp)]:+.3f} s")
+    # --screen-native: keep the screen at its own resolution instead of the face clip's. A vertical Short built from a
+    # long-form recording has a 1080x760 face band as its "clip"; conforming the 1920x1080 screen to that threw away
+    # most of its pixels (Fable Shorts 11/13), and the top band then had to zoom into a blurry track.
+    if "--screen-native" in args:
+        sp0 = next((x for x in srcs if x not in [s["path"] for s in tl]), None)
+        if sp0: pr = probe(sp0); SW, SH = pr["w"], pr["h"]; print(f"  screen kept at its own {SW}x{SH}")
     for n_, s in enumerate(tl):
         sp = screen_path(s["path"], val) or s["path"]; n = srcs.index(sp)
         lag = lags.get(os.path.basename(sp), 0.0) if sp != s["path"] else 0.0
         a, b = s["v_in"] - lag, s["v_out"] - lag
-        pad = f",tpad=start_duration={-a:.6f}:start_mode=clone" if a < 0 else ""   # screen file started after this head
         # a screen file that stops before this out point (separate camera/screen files often end early) would make the
-        # segment short and shift every later screen segment early: hold its last frame to the exact length instead
+        # segment short and shift every later screen segment early: hold its last frame to the exact length instead.
+        # ONE tpad carries both pads: a head pad (the screen file started after this head) chained with a second tpad
+        # for the tail came out short (Fable 11/13: c17 6 frames, c18 3 frames; every later segment ran early).
         if sp not in sdur: sdur[sp] = probe(sp)["dur"]
         sd = sdur[sp]
         if b > sd + 0.02: print(f"  screen {os.path.basename(sp)} ends {b - sd:.2f} s before {s['key']}'s out point: last frame held")
-        pad += f",tpad=stop_mode=clone:stop_duration={max(0.0, b - sd) + 0.5:.3f}"
+        pad = ",tpad=" + (f"start_duration={-a:.6f}:start_mode=clone:" if a < 0 else "") +               f"stop_mode=clone:stop_duration={max(0.0, b - sd) + 0.5:.3f}"
         fv.append(f"[{n}:v]trim=start={max(0, a):.6f}:end={b:.6f},setpts=PTS-STARTPTS{pad},fps={fps},trim=duration={b - a:.6f},"
-                  f"scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p[v{n_}]")
+                  f"scale={SW}:{SH}:force_original_aspect_ratio=decrease,pad={SW}:{SH}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p[v{n_}]")
     save(cfg, d, "config.json")
     filt = ";".join(fv) + ";" + "".join(f"[v{i_}]" for i_ in range(len(tl))) + f"concat=n={len(tl)}:v=1:a=0[vc]"
     out = p(d, "cut", f"screen_{tag}.mp4"); inputs = []
@@ -110,6 +118,11 @@ def cut_screen(d, cfg, tl, tag, args):
          "-r", str(fps), "-pix_fmt", "yuv420p", "-movflags", "+faststart", out])
     cfg.setdefault("screen_cuts", {})[tag] = os.path.relpath(out, d).replace("\\", "/"); save(cfg, d, "config.json")
     vd = tl[-1]["v_out_end"]; print(f"screen -> {out}  ({vd:.2f}s picture, same trims as the face)")
+    # the screen track must have exactly the face cut's frame count, or every push and panel after the gap drifts
+    nf = lambda f: int(subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v", "-count_packets", "-show_entries",
+                                       "stream=nb_read_packets", "-of", "csv=p=0", f], capture_output=True, text=True).stdout.strip() or 0)
+    a_, b_ = nf(p(d, "cut", f"clean_{tag}.mp4")), nf(out)
+    print(f"  frames: clean {a_}  screen {b_}" + ("" if a_ == b_ else f"   FAIL screen track is {b_ - a_:+d} frames off: do not render pushes on it"))
 
 def main():
     d, cfg = ws(); args = sys.argv

@@ -93,13 +93,20 @@ def detect(d, cfg):
     def rgb(p, t):
         return Image.frombytes("RGB", (480, 270), grab(p, t, "scale=480:270", "rgb24", 480 * 270 * 3))
     # every join, not only the candidates: a missed scene change (and "0 candidates") must be checked by eye too
-    if every:
-        sheet = Image.new("RGB", (960, 270 * len(every)), "black"); dr = ImageDraw.Draw(sheet)
-        for i, (a, b, diff, on) in enumerate(every):
+    # in pages of 6 joins: one sheet of every join of a 28-take video was 7,500 px tall, too tall to read (Fable 11/13)
+    PAGE = 6; pages = []
+    os.makedirs(os.path.join(d, "check"), exist_ok=True)
+    for f in os.listdir(os.path.join(d, "check")):
+        if f.startswith("transition_joins"): os.remove(os.path.join(d, "check", f))
+    for p0 in range(0, len(every), PAGE):
+        chunk = every[p0:p0 + PAGE]
+        sheet = Image.new("RGB", (960, 270 * len(chunk)), "black"); dr = ImageDraw.Draw(sheet)
+        for i, (a, b, diff, on) in enumerate(chunk):
             sheet.paste(rgb(*pic(a, a["out"] - 1 / cfg["fps"])), (0, 270 * i)); sheet.paste(rgb(*pic(b, b["in"])), (480, 270 * i))
-            dr.text((6, 270 * i + 6), f"{a['key']} -> {b['key']}  diff {diff:.1f}{'  CANDIDATE' if on else ''}", fill=(255, 230, 0))
-        os.makedirs(os.path.join(d, "check"), exist_ok=True); sheet.save(os.path.join(d, "check", "transition_joins.png"))
-    print(f"{len(joins)} candidates -> transitions.json. READ check/transition_joins.png (every join, candidates marked) "
+            dr.rectangle((0, 270 * i, 959, 270 * i + 24), fill=(0, 0, 0))
+            dr.text((6, 270 * i + 6), f"{a['key']} -> {b['key']}  diff {diff:.1f}{'  CANDIDATE' if on else ''}   (left: outgoing last frame | right: incoming first frame)", fill=(255, 230, 0))
+        name = f"transition_joins_{p0 // PAGE + 1}.png"; sheet.save(os.path.join(d, "check", name)); pages.append(name)
+    print(f"{len(joins)} candidates -> transitions.json. READ every check/transition_joins_N.png ({len(pages)} pages, every join, candidates marked) "
           f"with the words across each join: keep only real scene changes that end a thought. No transition is a valid "
           f"outcome: a talking head on one set has no scene change to mark.")
 

@@ -1,7 +1,7 @@
 """Find takes whose camera file starts late or stops early while the speaker is talking, and rebuild them from a
 longer recording of the same take.
 
-Usage: python pad_takes.py <ws> [--long "<folder>/<glob>"] [--apply] [--keys c04,c21] [--force] [--inset x,y,w,h]
+Usage: python pad_takes.py <ws> [--long "<folder>/<glob>"] [--apply] [--keys c04,c21] [--force] [--all] [--inset x,y,w,h]
 
 Recorders that write the camera as its own file (OBS Source Record and similar) can START it up to ~3 s after the
 main recording and STOP it ~1 s before. When a word runs into either edge the clip opens or ends mid-word, and NO later
@@ -21,6 +21,10 @@ prints the clipped word (or silently starts mid-sentence).
   then scaled up and played instead, so the face keeps moving while the speaker talks.
 - --keys c04,c21: report and rebuild only these clips. --force: rebuild them even if not flagged (when you can hear
   a clipped word the levels missed).
+- --all: rebuild EVERY clip on the long file's audio (= --force on all keys). For when the camera files carry recorder
+  buffer skips and the long recordings do not (fix_skips.py --report --long tells): the rebuilt clips then carry clean
+  audio, which restores what was dropped instead of smoothing the click. Re-run transcribe.py and cutpoints.py after,
+  and check every out point that moved by more than 0.1 s against the old cuts.json (cutting.md, "After an audio swap").
 Run it after init_workspace.py and before transcribe.py, so every later step reads the rebuilt clip. If transcribe.py
 already ran, run it again (it refreshes the audio and words of rebuilt clips), then cutpoints.py.
 """
@@ -90,7 +94,7 @@ def main():
     longs = sorted(glob.glob(a[a.index("--long") + 1])) if "--long" in a else []
     keys = set(a[a.index("--keys") + 1].split(",")) if "--keys" in a else None
     inset = [int(v) for v in a[a.index("--inset") + 1].split(",")] if "--inset" in a else None
-    force = "--force" in a
+    force = "--force" in a or "--all" in a
     clips = cfg["clips"]
     if longs and len(longs) != len(clips): sys.exit(f"--long matched {len(longs)} files for {len(clips)} clips: narrow the glob")
     changed = 0
@@ -110,7 +114,9 @@ def main():
             line = line.replace("  ok", "  ENDS ON SOUND") if hot_tail else line
             line += (f"  | starts {g:+.2f} s into {os.path.basename(L)}"
                      f"{'  STARTS ON SOUND' if hot_head else ''}; after the end: {post:6.1f} dB, runs {extra:+.2f} s longer")
-            if "--apply" in a and (hot_head or hot_tail or force) and (extra > 0.2 or (hot_head or force) and g > 0.15):
+            every = "--all" in a and g >= 0          # --all: every clip gets the long file's audio, even one it already covers
+            if "--all" in a and g < 0: line += "  (starts before the long file: kept as is)"
+            if "--apply" in a and (every or (hot_head or hot_tail or force) and (extra > 0.2 or (hot_head or force) and g > 0.15)):
                 head = min(g, HEAD_MAX) if (hot_head or (force and g > 0.15)) else 0.0
                 tail_to = len(y) / SR if (hot_tail or force) and extra > 0.2 else g + dur
                 out = os.path.join(d, "clips_long", os.path.basename(src)); os.makedirs(os.path.dirname(out), exist_ok=True)

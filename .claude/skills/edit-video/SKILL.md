@@ -37,6 +37,7 @@ Decide from what the user gave and said. If it is not clear, ask one question.
 | **Same, with animated inserts where the speaker leaves the slides to show the product** | 1-5 (`--no-punch --screen <folder>`), 7, `screen_spans.py`, 8 (SCREEN + PIP with `S.shot`), 9 | `references/screen-inserts.md` |
 | **Vertical Short** with captions, optional B-roll | 1-5, 7, 8, 9 | `references/captions-and-broll.md`, `references/formats.md` |
 | **Vertical Short from a stacked canvas** (screen/script on top, camera band below) | `split_wide.py`, then 1-5, 7, 8 (contiguous SPLIT beats, the band never empty), 9 | `references/formats.md`, Stacked layout |
+| **Vertical Shorts cut from a finished long-form** (separate face and screen files) | `long_to_shorts.py`, then per Short 1-5 (`--screen ... --screen-native`), 7, 8 (stacked layout, `hf/screenband.py`), 9, `video_review.py` | `references/shorts-from-long.md` |
 | **Long-form with motion-graphics B-roll** (16:9 talk, course, workshop) | 1-5, 7, 8, 9, one section first | `references/formats.md`, `references/captions-and-broll.md` |
 | **Inserting a finished segment** (ad read, intro) into any of the above | after step 2: `insert_segment.py` | `references/cutting.md`, Inserts |
 
@@ -148,7 +149,7 @@ A finished segment goes in with `insert_segment.py <ws> <file> --after <segment>
 ## 6. Scene-change transitions (screen recordings)
 
 ```
-uv run --project $S python $S/transitions.py <ws> detect                  # -> transitions.json + check/transition_joins.png
+uv run --project $S python $S/transitions.py <ws> detect                  # -> transitions.json + check/transition_joins_N.png (pages)
 uv run --project $S python $S/transitions.py <ws> render --tag v1         # a push at every join -> cut/transitions_v1.mp4
 ```
 
