@@ -78,11 +78,18 @@ def main():
             print(f"{name} part {i}: {t0:.2f}-{t1:.2f} ({t1 - t0:.1f} s, starts in {seg['key']})  crop x={x0} of {cw}  -> {os.path.basename(fo)}")
         json.dump({"mode": "stacked", "w": 1080, "h": 1920, "face_side": "bottom", "seam": 1920 - bh},
                   open(os.path.join(fd, "layout.json"), "w"), indent=1)
-        chk = os.path.join(out, f"check_{name}.png")
-        run(["ffmpeg", "-v", "error", "-y", "-ss", "0.5", "-i", os.path.join(fd, f"{name}-face 01.mkv"), "-frames:v", "1",
-             "-vf", f"drawbox=x={bw // 2 - 1}:y=0:w=2:h={bh}:color=red@0.8:t=fill", chk])
+        # three frames across the first part, not one: a single frame caught the speaker leaning and invited a wrong
+        # --nudge (MongoDB Short 2, 11/14). Judge the middle of the three.
+        chk = os.path.join(out, f"check_{name}.png"); p1 = os.path.join(fd, f"{name}-face 01.mkv"); d1 = probe(p1)["dur"]
+        tiles = []
+        for k, tt in enumerate((0.5, d1 / 2, max(0.5, d1 - 1.0))):
+            tf = os.path.join(out, f"_chk_{name}_{k}.png"); tiles.append(tf)
+            run(["ffmpeg", "-v", "error", "-y", "-ss", f"{tt:.2f}", "-i", p1, "-frames:v", "1",
+                 "-vf", f"drawbox=x={bw // 2 - 1}:y=0:w=2:h={bh}:color=red@0.8:t=fill,scale=540:-2", tf])
+        run(["ffmpeg", "-v", "error", "-y", *sum((["-i", t_] for t_ in tiles), []), "-filter_complex", "hstack=inputs=3", chk])
+        for t_ in tiles: os.remove(t_)
         flag = "" if 25 <= total <= 62 else "   WARN outside the usual 30-60 s for a Short"
-        print(f"{name}: {total:.1f} s in {len(sp)} part(s). READ {chk} (face centred on the red line?){flag}")
+        print(f"{name}: {total:.1f} s in {len(sp)} part(s). READ {chk} (start, middle, end: face centred on the red line?){flag}")
     print(f"\nNext, per Short: init_workspace.py {out}/src/<name>/faces --out {out}/<name>, then the steps in "
           f"references/shorts-from-long.md (assemble.py with --screen {out}/src/<name>/screens --screen-native).")
 

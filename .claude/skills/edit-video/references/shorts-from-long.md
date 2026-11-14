@@ -30,6 +30,7 @@ animation, all passing validate, sync, loudness and the empty-band check.
    uv run --project $S python $S/assemble.py <ws>/shorts/s1 --no-punch --screen <ws>/shorts/src/s1/screens --screen-native
    uv run --project $S python $S/validate_cut.py <ws>/shorts/s1
    ```
+   - Copied caption fixes that do not occur in a Short are summarised on one line; that is expected.
    - `transcribe.py` reuses an existing `words.json`. In full mode check the Short's `costs.jsonl` shows the
      transcription call (one Short logged $0 because it had copied the local transcript).
    - `pauses.py` normally finds nothing: the long-form removed them. Its REPEAT / RESTART lines are often the
@@ -43,18 +44,23 @@ animation, all passing validate, sync, loudness and the empty-band check.
 5. **The graphics band** (B-roll page, stacked layout, `captions-and-broll.md`):
    - Screen-led beats: `hf/screenband.py` plays the Short's screen track in a rounded window and eases a camera onto
      the region being talked about, on the word. Pick the rects off a gridded frame of `cut/screen_<tag>.mp4`.
+     Product UI with small text needs `max_zoom=1.8`-`2.0` and a tight rect on the one line being talked about; the
+     default 1.4x left a database UI unreadable at phone size (MongoDB, 11/14).
    - Animated beats: the scene library (title cards, checklists, statement lines, code slips) like any B-roll page.
      A "mostly animations" Short is a sequence of these timed to the words, with the screen used only where it proves
      the point.
    - **The band is never empty.** A gap of a second between two scenes reads as broken; land the next title as the
-     previous scene leaves (`EMPTY BAND` / the band check must report 0).
+     previous scene leaves (`EMPTY BAND` / the band check must report 0). A scene that is "up" but has not drawn its
+     first element yet is empty too, and only `empty_card.py` on the rendered draft sees it: run it on every draft.
+   - Put `tk.key` where the scene's main visual lands, not at its last word, or every beat reads SHORT DWELL.
    - **No text on screen twice.** While a kinetic text card spells out the sentence being spoken, hide the captions
      (fade them out as the card enters, back in as it leaves); the reviewer does not always catch this.
    - Long titles: keep model names whole on one line ("Opus 5.5"), shorten the title rather than let it wrap into
      the line below.
 6. **Render and export** one Short at a time (one heavy GPU job): draft, read the review sheets, then high and
    `finalize.py`. Each Short ends with the skill's 1 s hold.
-7. **Review each Short** (`video_review.py`, full mode): about a cent each. On the Fable Shorts it caught a diagram
+7. **Review each Short** (`video_review.py`, full mode): about a cent each. The cut list is found by matching the
+   export's length when its version number differs from the cut's tag. On the Fable Shorts it caught a diagram
    clipped at the band's edges and a screen that flipped to the next slide during the final fade; fix and re-export
    as a new version.
 

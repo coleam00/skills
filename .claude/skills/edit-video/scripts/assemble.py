@@ -86,6 +86,9 @@ def cut_screen(d, cfg, tl, tag, args):
     srcs, fv, sdur = [], [], {}
     for s in tl:
         sp = screen_path(s["path"], val) or s["path"]
+        if sp == s["path"] and not s["clip"].startswith("m"):
+            print(f"  WARN no screen file found for {s['key']} ({os.path.basename(s['path'])}): its own picture fills the screen "
+                  f"track. Check the names pair (\"-face \" -> \"-screen \", \"_face.\" -> \"_screen.\") or pass the screen folder")
         if sp not in srcs: srcs.append(sp)
         if sp != s["path"] and os.path.basename(sp) not in lags:
             lags[os.path.basename(sp)] = round(screen_lag(s["path"], sp), 4)

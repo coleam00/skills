@@ -1,4 +1,5 @@
-"""Scene-change transitions between clips: a soft wipe + a quiet whoosh, sitting in a deliberate pause.
+"""Scene-change transitions between clips. DEFAULT: a push (the whole frame slides, whoosh on the cut), with plain-cut
+tails and no `room` step. The legacy soft wipe (--kind smoothleft) is described further down; ignore it for a push.
 
 Usage:
   uv run --project $S python transitions.py <ws> detect [--threshold 6]   # which clip joins change scene
@@ -13,7 +14,7 @@ legacy soft wipe (--kind smoothleft).
 
 Rules (references/transitions.md): only at clip joins where the SCREEN changes, never at a tab switch inside one
 clip, never at a join that stays on the same screen. The whoosh is quiet and lands in silence, never over a word,
-so a transition join gets ~0.5-0.8 s of pause where a plain cut gets ~0.15-0.3 s.
+so a SOFT-WIPE join gets ~0.5-0.8 s of pause where a plain cut gets ~0.15-0.3 s. A push join keeps its plain-cut pause.
 
 detect : compares the last kept frame of each segment with the first of the next (face-cam bubble masked) and writes
          <ws>/transitions.json {"joins": [incoming segment keys]}. Edit that list by hand to add/remove joins.

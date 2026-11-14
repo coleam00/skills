@@ -131,8 +131,9 @@ def main():
         os.remove(wav)
     json.dump(report, open(os.path.join(d, "skips.json"), "w"), indent=1)
     if cmp_rows:
-        bad_clip = [r for r in cmp_rows if r[1] >= 5]; bad_long = [r for r in cmp_rows if r[3] >= 5]
-        print(f"SKIPS  clips with skips (>= 5x on the grid): {len(bad_clip)} of {len(cmp_rows)}   long files: {len(bad_long)} of {len(cmp_rows)}")
+        # >= 5x on the grid AND at least 20 skips: a handful of spikes on one phase is chance (MongoDB c11: 5 of 92 read 5x)
+        bad_clip = [r for r in cmp_rows if r[1] >= 5 and r[2] >= 20]; bad_long = [r for r in cmp_rows if r[3] >= 5 and r[4] >= 20]
+        print(f"SKIPS  clips with skips (>= 5x on the grid, >= 20 skips): {len(bad_clip)} of {len(cmp_rows)}   long files: {len(bad_long)} of {len(cmp_rows)}")
         if bad_clip and len(bad_long) < len(bad_clip) / 3:
             print("  -> the long recordings are clean: rebuild the clips on their audio (restores what was dropped):\n"
                   "     pad_takes.py <ws> --long \"<same glob>\" --apply --all [--inset x,y,w,h], then transcribe.py, cutpoints.py")

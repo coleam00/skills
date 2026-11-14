@@ -51,6 +51,7 @@ def main():
     # caption_fixes: match on words (punctuation-insensitive), replace the span, spread its time over the new words
     key = lambda s: re.sub(r"[^a-z0-9']", "", s.lower())
     fx = load(d, "caption_fixes.json", default={}) or {}; keep = fx.pop("_keep", [])
+    unmatched = []
     for a, b in fx.items():
         A, B = [key(t) for t in a.split()], b.split(); i = 0; hits = 0
         while i <= len(words) - len(A):
@@ -61,16 +62,20 @@ def main():
                 new[-1]["w"] += tail if not new[-1]["w"].endswith(tail) else ""; new[-1]["e"] = e0
                 words[i:i + len(A)] = new; i += len(B); hits += 1
             else: i += 1
-        if not hits: print(f"WARN caption fix {a!r} matched nothing")
+        if not hits: unmatched.append(a)
+    if unmatched:   # one line, not one per fix: a Short that inherits the long-form's fixes has dozens that do not occur
+        print(f"  {len(unmatched)} caption fix(es) matched nothing here (fine for fixes copied from another edit): "
+              + ", ".join(repr(x) for x in unmatched[:8]) + (" ..." if len(unmatched) > 8 else ""))
     W, H = canvas(cfg); vertical = H > W                 # the stacked layout captions a 9:16 canvas, not the camera band
     target, hard = (22, 26) if vertical else (34, 42)
     merge_max = hard + (2 if vertical else 5)   # a merged phrase must still fit one line: 31 chars wrapped at 1080 wide
-    nobreak = set()
+    nobreak = set(); unkept = []
     for ph in keep:
         K = [key(t) for t in ph.split()]; hit = False
         for i in range(len(words) - len(K) + 1):
             if [key(w["w"]) for w in words[i:i + len(K)]] == K: nobreak.update(range(i, i + len(K) - 1)); hit = True
-        if not hit: print(f"WARN _keep {ph!r} matched nothing")
+        if not hit: unkept.append(ph)
+    if unkept: print(f"  {len(unkept)} _keep phrase(s) not in this cut: " + ", ".join(repr(x) for x in unkept[:8]) + (" ..." if len(unkept) > 8 else ""))
     clauses, cur = [], []
     for i, w in enumerate(words):
         cur.append(i); nx = words[i + 1] if i + 1 < len(words) else None
