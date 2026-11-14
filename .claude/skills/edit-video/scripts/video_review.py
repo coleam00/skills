@@ -57,7 +57,18 @@ def joins(d, video, tag):
     if not tag:
         m = re.search(r"_([A-Za-z0-9]+)\.[a-z0-9]+$", os.path.basename(video)); tag = m.group(1) if m else None
     f = p(d, "cut", f"timeline_{tag}.json") if tag else None
-    if not f or not os.path.exists(f): return None
+    if not f or not os.path.exists(f):
+        # the export's version (<Name>_v2) need not be the cut's tag (v1): match the cut by length instead (export =
+        # cut + the 1 s end hold). MongoDB Shorts 11/14: every re-export needed --tag by hand.
+        import glob, subprocess
+        dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", video],
+                                   capture_output=True, text=True).stdout or 0)
+        cands = []
+        for g in glob.glob(p(d, "cut", "timeline_*.json")):
+            t_ = json.load(open(g, encoding="utf-8"))
+            if t_ and abs(t_[-1]["out_end"] + 1.0 - dur) < 0.15 or t_ and abs(t_[-1]["out_end"] - dur) < 0.15: cands.append(g)
+        if len(cands) != 1: return None
+        f = cands[0]; print(f"  cut list: {os.path.basename(f)} (matched by length; pass --tag to choose another)")
     tl = json.load(open(f, encoding="utf-8"))
     return [round(s["out_end"], 2) for s in tl[:-1]]
 

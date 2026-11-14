@@ -86,6 +86,7 @@ spacing), run it on a known-bad render first and make sure it fails.
 | Cut | eyes | `check/eyes_*.png` | eyes on lens through every picture out point |
 | Cut | levels | per-segment `ebur128` | spread under ~1.5 LU, else `--level` |
 | Transitions | where | `check/transition_joins_N.png` pages + the words | only scene changes at thought ends |
+| Joins | click ratio (validate_cut) | the sample jump at the cut against the 0.1 s before it | informational: the micro-fades handle most; above ~10x listen to that join |
 | Transitions | push | frame strip across every push + the frames just outside it | incoming left, outgoing right at mid-push; never the next screen on both halves; edges equal the untouched cut (soft wipe: `check/wipe_bubbles_<tag>.png`, eyes on lens) |
 | Captions | verbatim, readable | printed phrases | names right and whole, nothing under 0.5 s |
 | B-roll | lint / inspect | `render.py` | 0 errors, inspect clean |

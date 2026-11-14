@@ -107,3 +107,7 @@ The video review is a lead, not a verdict. On that edit it caught the real probl
 screen, recorder dropouts in the camera audio, a clipped diagram and a wrong last frame in a Short) and also reported
 many that were not there (transition sounds "too loud" that sat in pauses, a misread number under the mouse pointer,
 a "path leak" that was a menu). Check every note against the frames and the audio before acting on it.
+
+Zero notes is not a verdict either. On the MongoDB edit (11/14) the reviewer returned no notes three times (whole video
+and two halves). Report it as "no leads", run the skill's own checks as always, and if you want a second opinion, run
+one other model with `--model` rather than the same one again.

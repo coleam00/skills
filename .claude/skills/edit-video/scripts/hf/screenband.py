@@ -27,7 +27,18 @@ def _state(r, vw, vh):
     return round(x, 2), round(y, 2), round(sc, 5)
 
 
-def screen(tk, sid, src, moves, box=BOX):
+def screen(tk, sid, src, moves, box=BOX, max_zoom=None):
+    """max_zoom: dense product UI (~15 px body text in the 1920 recording) is unreadable at phone size under the
+    default 1.4x; 1.8-2.0x on a tight rect around the one line being talked about reads (MongoDB Short 2, 11/14)."""
+    global MAX_ZOOM
+    old = MAX_ZOOM; MAX_ZOOM = max_zoom or MAX_ZOOM
+    try:
+        return _screen(tk, sid, src, moves, box)
+    finally:
+        MAX_ZOOM = old
+
+
+def _screen(tk, sid, src, moves, box):
     x, y, w, h = box
     name = tk.asset(src)
     cam = f"#{sid}cam"
