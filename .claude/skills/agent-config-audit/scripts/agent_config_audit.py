@@ -654,14 +654,19 @@ def compromised_in_text(text: str, eco: str, mode: str) -> list[str]:
         if e != eco:
             continue
         for m in _name_re(name).finditer(text):
-            if mode == "line":
-                end = text.find("\n", m.end())
-                window = re.split(r"[,\"']", text[m.end(): end if end != -1 else len(text)], maxsplit=1)[0]
-            else:
-                window = text[m.end(): m.end() + 600]
-                window = re.split(r"\n\s*\n|\[\[package\]\]", window, maxsplit=1)[0]
+            window = text[m.end(): m.end() + 400]
             for v in versions:
-                if _ver_re(v).search(window):
+                ev = re.escape(v)
+                exact = [
+                    rf"\s*(?:\[[^\]\n]*\])?\s*===?\s*{ev}(?![\w.])",          # requirements, pyproject: ==1.26.1
+                    rf"[@/]{ev}(?![\w.])",                                      # pnpm, bun, npm keys: @1.26.1
+                ]
+                if mode == "block":
+                    exact += [
+                        rf"[\"']?\s*\r?\n\s*version\s*=\s*[\"']{ev}[\"']",     # TOML locks: name, then version
+                        rf"@[^\n]*:\s*\r?\n\s+version:?\s+[\"']?{ev}(?![\w.])",  # yarn: header, then version
+                    ]
+                if any(re.match(p, window) for p in exact):
                     hits.append(f"{name} {v}")
     return sorted(set(hits))
 
@@ -822,7 +827,7 @@ def scan_projects(root: Path, walked: list) -> list[dict]:
         if ".git" in dirnames_all or ".git" in filenames:
             idx = git_index_path(here)
             data = read_bytes(idx, 200_000_000) if idx else None
-            if data and b".claude/settings.local.json" in data:
+            if data and b".claude/settings.local.json\x00" in data:
                 proj(here)["flags"].append({"id": "local-settings-tracked", "reason":
                     ".claude/settings.local.json is tracked by git, so every command approved with \"don't ask again\" "
                     "(secrets included) is pushed with the repo"})
@@ -899,7 +904,7 @@ def scan_projects(root: Path, walked: list) -> list[dict]:
 # --------------------------------------------------------------------------- history
 
 HISTORY_RULES = [
-    ("anthropic", r"sk-ant-[A-Za-z0-9_\-]{20,}"),
+    ("anthropic", r"sk-ant-[A-Za-z0-9_\-]{40,}"),  # real keys run ~100 chars; shorter is a fragment or a fake
     ("openrouter", r"sk-or-v1-[A-Za-z0-9]{32,}"),
     ("openai", r"sk-(?:proj|svcacct|admin)-[A-Za-z0-9_\-]{20,}|sk-[A-Za-z0-9]{32,}"),
     ("github", r"(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{50,}"),
@@ -956,8 +961,9 @@ def _classify(kind: str, value: str) -> tuple[str, str] | None:
                 break
     if kind == "private-key":
         return kind, value
-    body = re.sub(r"^(?:sk-(?:ant-|or-v1-|proj-|svcacct-|admin-)?|(?:sk|rk)_live_|gh[a-z]_|github_pat_|xox[a-z]-|AIza|AKIA)", "", value)
-    if len(set(body)) < 8 or PLACEHOLDER_RE.search(value):
+    body = re.sub(r"^(?:sk-(?:ant-(?:[a-z]+\d+-)?|or-v1-|proj-|svcacct-|admin-)?|(?:sk|rk)_live_|gh[a-z]_|github_pat_|"
+                  r"xox[a-z]-|AIza|AKIA)", "", value)
+    if len(set(body)) < 10 or PLACEHOLDER_RE.search(value):
         return None
     if kind == "bearer" and not (re.search(r"\d", value) and re.search(r"[A-Za-z]", value)):
         return None
@@ -1027,6 +1033,8 @@ def scan_history(only: str | None, max_seconds: float) -> dict:
         groups.setdefault(label, {"folder": label, "files": 0, "scanned": 0, "unique": {}, "occurrences": {},
                                   "newest": "", "examples": [], "_seen": set()})["files"] += 1
     scanned = skipped_long = 0
+    distinct: set = set()
+
     capped = False
     for label, path in files:
         if time.monotonic() - start >= max_seconds:
@@ -1068,14 +1076,14 @@ def scan_history(only: str | None, max_seconds: float) -> dict:
                         continue
                     g["_seen"].add(key)
                     g["unique"][kind] = g["unique"].get(kind, 0) + 1
+                    distinct.add(key)
                     if len(g["examples"]) < MAX_LIST:
                         g["examples"].append({"type": kind, "prefix": value[:4] + "****", "file": path.name,
                                               "line": n, "date": day})
     out_groups = []
-    total = 0
+    total = len(distinct)  # a key seen in several folders counts once here
     for g in groups.values():
         g.pop("_seen")
-        total += sum(g["unique"].values())
         out_groups.append(g)
     out_groups.sort(key=lambda g: (-sum(g["unique"].values()), g["folder"]))
     flags = []

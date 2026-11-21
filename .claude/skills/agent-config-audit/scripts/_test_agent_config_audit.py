@@ -189,6 +189,10 @@ def build_clean_deps(root: pathlib.Path) -> None:
           '[[package]]\nname = "api"\nversion = "0.1.0"\ndependencies = [{ name = "agent-framework" }]\n\n'
           '[[package]]\nname = "agent-framework-core"\nversion = "1.26.1"\n')
     write(root, "api/requirements-dev.txt", "pytest==8.3.4\nruff==0.8.4\n")
+    # The fix people write for a poisoned release must not itself read as a pin of it.
+    write(root, "api/requirements-exclude.txt", "agent-framework>=1.26.0,!=1.26.1,!=1.26.2\n")
+    write(root, "api/sub/uv.lock", 'version = 1\n\n[[package]]\nname = "app"\nversion = "0.1.0"\ndependencies = [\n'
+          '    { name = "agent-framework" },\n    { name = "numpy", version = "1.26.2" },\n]\n')
     # A POSIX-layout venv with only ordinary .pth files.
     write(root, "api/.venv/pyvenv.cfg", "home = /usr/bin\n")
     sp = "api/.venv/lib/python3.12/site-packages/"
@@ -234,6 +238,13 @@ def build_home(home: pathlib.Path, repo: pathlib.Path) -> None:
               ".vscode/extensions/esbenp.prettier-vscode-11.0.0"):
         (home / d).mkdir(parents=True, exist_ok=True)
     write(home, ".cursor/extensions/extensions.json", "[]")
+
+
+def build_worktree_repo(td: pathlib.Path) -> None:
+    """A git worktree: .git is a file pointing at the real git dir, whose index lists the local settings."""
+    write(td, "wt-repo/.git", "gitdir: ../gitdirs/wt\n")
+    write_bytes(td, "gitdirs/wt/index", b"DIRC\x00\x00\x00\x02" + b".claude/settings.local.json\x00")
+    write_bytes(td, "lookalike-repo/.git/index", b"DIRC\x00\x00\x00\x02" + b".claude/settings.local.json.example\x00")
 
 
 def build_clean(root: pathlib.Path) -> None:
@@ -314,6 +325,7 @@ def main() -> int:
         build_evil(evil)
         build_clean(clean)
         build_home(home, evil)
+        build_worktree_repo(pathlib.Path(td))
         aca.HOME = home
         before = tree_hash(pathlib.Path(td))
 
@@ -364,6 +376,15 @@ def main() -> int:
         check("pin unit: other package same line", cu('["agent-framework>=1", "x==1.26.1"]', "pypi", "line") == [])
         check("pin unit: -core is a different package", cu("agent-framework-core==1.26.1", "pypi", "line") == [])
         check("pin unit: 1.26.10 is not 1.26.1", cu("agent-framework==1.26.10", "pypi", "line") == [])
+        check("pin unit: != exclusion is not a pin", cu("agent-framework!=1.26.1,!=1.26.2", "pypi", "line") == [])
+        check("pin unit: >= is not a pin", cu("agent-framework>=1.26.1", "pypi", "line") == [])
+        check("pin unit: extras pin", cu("agent-framework[all]==1.26.2", "pypi", "line") == ["agent-framework 1.26.2"])
+        check("pin unit: neighbour's version in a lock block",
+              cu('dependencies = [\n { name = "agent-framework" },\n { name = "numpy", version = "1.26.2" },\n]\n',
+                 "pypi", "block") == [])
+        check("placeholder unit: low-variety key body ignored",
+              aca._classify("anthropic", "sk-" + "ant-api03-" + "Zq7" * 12) is None)
+        check("placeholder unit: real-looking key kept", aca._classify("anthropic", HIST["anthropic"]) is not None)
 
         # History, scoped to one repo.
         hist = json.loads(run([str(evil), "--history-for", str(evil), "--json"]))
@@ -401,6 +422,9 @@ def main() -> int:
         check("--history covers other projects", any("some-other-repo" in k for k in hall), str(list(hall)))
         check("--history covers codex history.jsonl", "~/.codex/history.jsonl" in hall, str(list(hall)))
         check("--history not capped", everything["history"]["capped"] is False)
+        check("unique secrets counted once across folders", everything["history"]["unique_secrets"] == len(HIST) + 4,
+              str(everything["history"]["unique_secrets"]))
+
         ext = {e["editor"]: e for e in everything["extensions"]}
         check("extensions counted",
               ext.get("Cursor", {}).get("count") == 2 and ext.get("VS Code", {}).get("count") == 2,
@@ -445,6 +469,11 @@ def main() -> int:
               str(clean_report["summary"]))
 
         folder = json.loads(run([td, "--json"]))
+        fprojs = {p["path"]: [f["id"] for f in p["flags"]] for p in folder["projects"]}
+        check("worktree .git file: tracked local settings found", "local-settings-tracked" in fprojs.get("wt-repo", []),
+              str(fprojs.get("wt-repo")))
+        check("settings.local.json.example in the index is not the real file",
+              "local-settings-tracked" not in fprojs.get("lookalike-repo", []), str(fprojs.get("lookalike-repo")))
         check("folder of repos finds both", {c["path"].split("/")[0] for c in folder["configs"]}
               == {"evil-repo", "clean-repo"})
 
