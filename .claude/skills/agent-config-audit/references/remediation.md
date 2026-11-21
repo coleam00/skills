@@ -83,6 +83,60 @@ publish credentials.
    to `.gitignore`, commit.
 3. `git ls-files | grep settings.local.json` should print nothing afterwards.
 
+`local-settings-tracked` is fixed by steps 2 and 3, but only after step 1: a command
+approved with "don't ask again" is saved verbatim, so assume every key in the file leaked.
+
+## Dependencies
+
+- **`no-lockfile`:** commit a lockfile and install from it (`npm ci`, `pnpm install
+  --frozen-lockfile`, `bun install --frozen-lockfile`, `uv sync --locked`,
+  `poetry install`, `cargo build --locked`). For a plain `requirements.txt`, pin every
+  line with `==`, ideally with `--require-hashes`.
+- **Wait out new releases.** Most poisoned releases are pulled within days, so refuse
+  anything younger than that: pnpm `minimumReleaseAge` in `pnpm-workspace.yaml` (minutes,
+  for example `10080` for a week), uv `exclude-newer` in `pyproject.toml` under `[tool.uv]`
+  or `--exclude-newer <date>`, npm `--before <date>`. Update deliberately, then re-run
+  this scan.
+- **`known-compromised`:** remove the version, pin a clean one, delete and recreate the
+  virtualenv or `node_modules`. If it was ever installed or imported, follow "When a hook
+  already ran" below: the agent-framework stealer ran from a `.pth` file at every Python
+  start, before any of your code.
+- **`suspicious-pth`:** read the file by hand (do not run Python in that environment
+  first, since that executes it). If nobody can say which package installed it, delete
+  the virtualenv and treat the machine as exposed.
+
+## Secrets in conversation history (`secret-in-history`)
+
+1. **Rotate the key first.** The transcript sits on disk in plain text and may already
+   have been copied by a backup, a sync tool or malware.
+2. Then delete the transcript file the scanner named (`~/.claude/projects/<folder>/<file>`
+   or `~/.codex/sessions/...`), or redact the value in it. Never open it in the agent to
+   do this: that puts the secret back into a new session.
+3. Shorten retention: Claude Code's `cleanupPeriodDays` in `~/.claude/settings.json`
+   deletes old transcripts automatically.
+4. Stop pasting keys into prompts. Put them in an env file the agent never reads (the
+   secrets guard hook above enforces that) and have code load them from the environment.
+
+## Editor extensions (`known-bad-extension`)
+
+1. Uninstall it from the editor, then delete its folder under `~/.vscode/extensions`,
+   `~/.cursor/extensions` or `~/.windsurf/extensions` if it remains.
+2. Rotate every key the editor could reach: model API keys, GitHub tokens, cloud
+   credentials in the workspace.
+3. Install extensions only from the publisher's verified listing, and check the
+   publisher name, not just the display name.
+
+## Stolen AI keys (LLMjacking)
+
+- **One key per tool, each with a spend limit** set at the provider (Anthropic, OpenAI and
+  OpenRouter all support per-key or per-workspace limits). A leaked key then costs at
+  most its limit, and you know which tool leaked it.
+- **Never expose an AI gateway with a default key.** LiteLLM's documented master key
+  `sk-1234` (`default-gateway-key`), Ollama listening on `0.0.0.0:11434` with no auth, and
+  Open WebUI with sign-up left open are all found by scanners within hours. Bind to
+  localhost or put real auth in front, and set a long random key.
+- Turn on usage alerts so a spike is noticed the same day.
+
 ## Teams
 
 - **CODEOWNERS on agent config**, plus branch protection requiring code-owner review:

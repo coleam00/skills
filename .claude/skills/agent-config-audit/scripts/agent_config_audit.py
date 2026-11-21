@@ -10,6 +10,8 @@ and there is no subprocess or network code in this file. Values are redacted by 
     python agent_config_audit.py . --user             # also your user-level agent config
     python agent_config_audit.py . --json             # structured output
     python agent_config_audit.py . --show-values      # print env values and tokens as-is
+    python agent_config_audit.py . --history-for .    # also this repo's agent transcripts
+    python agent_config_audit.py . --user --history   # the whole machine
 
 WHAT IT READS
 -------------
@@ -21,6 +23,13 @@ Gemini CLI    .gemini/settings.json
 VS Code       .vscode/tasks.json (runOn: folderOpen), .vscode/mcp.json
 Instructions  CLAUDE.md, AGENTS.md, GEMINI.md, .cursorrules and friends, checked only
               for invisible characters (text the agent reads and you cannot see)
+Dependencies  manifests without a lockfile, pins of known-compromised releases in lockfiles
+              and requirements, installed metadata and code-running .pth files in project
+              virtualenvs, a .claude/settings.local.json tracked in .git/index, and AI gateway
+              config left on the LiteLLM default key
+--user        also installed VS Code, Cursor and Windsurf extensions (known-bad versions)
+--history     Claude Code and Codex transcripts, for pasted or printed secrets. Only the type,
+              the first four characters, the file and the line are ever reported
 
 The inventory lists every hook, MCP server, task, helper command, env var, permission
 rule, plugin source and auto-approval setting. Flags are deliberately few: each one is
@@ -34,6 +43,7 @@ import json
 import os
 import re
 import sys
+import time
 from pathlib import Path
 
 try:
@@ -270,10 +280,10 @@ def unpinned_package(command, args) -> str | None:
 
 # --------------------------------------------------------------------------- parsing
 
-def read_text(path: Path) -> str | None:
-    """The only file access in this script. Read mode, size-capped."""
+def read_text(path: Path, limit: int = MAX_BYTES) -> str | None:
+    """Text file access. Read mode, size-capped."""
     try:
-        if path.stat().st_size > MAX_BYTES:
+        if path.stat().st_size > limit:
             return None
         with open(path, "r", encoding="utf-8", errors="replace") as fh:
             return fh.read()
@@ -590,16 +600,543 @@ def scan_markdown(path: Path, rel: str, scanner: Scanner) -> dict | None:
     return {"path": rel, "lines": lines, "flags": flags}
 
 
-def scan_root(root: Path, scanner: Scanner) -> tuple[list, list]:
-    configs, docs = [], []
+# --------------------------------------------------------------------------- dependencies
+
+HOME: Path | None = None  # tests point this at a fake home directory
+
+
+def home_dir() -> Path:
+    return HOME or Path.home()
+
+
+# Releases known to carry malware. (ecosystem, normalized name, versions, what happened)
+KNOWN_COMPROMISED = [
+    ("pypi", "agent-framework", {"1.26.1", "1.26.2"},
+     "Microsoft agent-framework releases that shipped a .pth credential stealer (2026-11-17)"),
+]
+MANIFESTS = {"package.json": "npm", "pyproject.toml": "pypi", "Pipfile": "pypi", "Cargo.toml": "cargo",
+             "go.mod": "go", "Gemfile": "rubygems"}
+REQUIREMENTS_RE = re.compile(r"(?i)^requirements[\w.\-]*\.txt$")
+LOCKFILES = {"package-lock.json": "npm", "npm-shrinkwrap.json": "npm", "pnpm-lock.yaml": "npm", "yarn.lock": "npm",
+             "bun.lock": "npm", "bun.lockb": "npm", "uv.lock": "pypi", "poetry.lock": "pypi", "pdm.lock": "pypi",
+             "Pipfile.lock": "pypi", "Cargo.lock": "cargo", "go.sum": "go", "Gemfile.lock": "rubygems"}
+LOCK_NAMES = {"npm": "package-lock.json, pnpm-lock.yaml, yarn.lock or bun.lock",
+              "pypi": "uv.lock, poetry.lock, Pipfile.lock or fully pinned requirements",
+              "cargo": "Cargo.lock", "go": "go.sum", "rubygems": "Gemfile.lock"}
+LOCK_MAX_BYTES = 60_000_000
+# .pth files that ship with ordinary tooling. Any other .pth that runs code is a lead.
+WELL_KNOWN_PTH = re.compile(
+    r"(?i)^(?:distutils-precedence|_virtualenv|easy-install|setuptools|pywin32|virtualenv_path_extensions|"
+    r"a1_coverage|coverage|matplotlib|_distutils_hack|__editable__\..*|.*-nspkg)\.pth$")
+GATEWAY_FILE_RE = re.compile(
+    r"(?i)^(?:docker-)?compose[\w.\-]*\.ya?ml$|^\.env\.(?:example|sample|template|dist)$|litellm[\w.\-]*\.ya?ml$|^config\.ya?ml$")
+GATEWAY_KEY_RE = re.compile(r"(?<![\w\-])sk-1234\d*(?![\w\-])")
+GATEWAY_HINT_RE = re.compile(r"(?i)litellm|master[_\-]?key")
+
+
+def norm_name(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name.strip().lower())
+
+
+def _name_re(name: str) -> re.Pattern:
+    body = r"[-_.]".join(re.escape(p) for p in name.split("-"))
+    return re.compile(rf"(?i)(?<![\w.\-/]){body}(?![\w\-]|\.\w)")
+
+
+def _ver_re(v: str) -> re.Pattern:
+    return re.compile(rf"(?<![\w.]){re.escape(v)}(?![\w.]|\.\d)")
+
+
+def compromised_in_text(text: str, eco: str, mode: str) -> list[str]:
+    """Known-bad name+version pins in a lockfile or requirements text. mode: line | block."""
+    hits = []
+    for e, name, versions, _ in KNOWN_COMPROMISED:
+        if e != eco:
+            continue
+        for m in _name_re(name).finditer(text):
+            if mode == "line":
+                end = text.find("\n", m.end())
+                window = re.split(r"[,\"']", text[m.end(): end if end != -1 else len(text)], maxsplit=1)[0]
+            else:
+                window = text[m.end(): m.end() + 600]
+                window = re.split(r"\n\s*\n|\[\[package\]\]", window, maxsplit=1)[0]
+            for v in versions:
+                if _ver_re(v).search(window):
+                    hits.append(f"{name} {v}")
+    return sorted(set(hits))
+
+
+def compromised_in_json_lock(text: str, eco: str) -> list[str]:
+    """package-lock.json, npm-shrinkwrap.json, node_modules/.package-lock.json, Pipfile.lock."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return compromised_in_text(text, eco, "block")
+    found = []
+    entries = []
+    if isinstance(data, dict):
+        for key in ("packages", "dependencies"):
+            for k, v in (data.get(key) or {}).items() if isinstance(data.get(key), dict) else []:
+                if isinstance(v, dict):
+                    entries.append((k.rsplit("node_modules/", 1)[-1], str(v.get("version", ""))))
+        for key in ("default", "develop"):
+            for k, v in (data.get(key) or {}).items() if isinstance(data.get(key), dict) else []:
+                if isinstance(v, dict):
+                    entries.append((k, str(v.get("version", "")).lstrip("=")))
+    for e, name, versions, _ in KNOWN_COMPROMISED:
+        if e == eco:
+            found += [f"{name} {ver}" for n, ver in entries if norm_name(n) == name and ver in versions]
+    return sorted(set(found))
+
+
+def compromised_flag(file_label: str, hits: list[str]) -> dict:
+    notes = {f"{n} {v}": why for _, n, vs, why in KNOWN_COMPROMISED for v in vs}
+    why = "; ".join(sorted({notes.get(h, "") for h in hits} - {""}))
+    return {"id": "known-compromised", "reason":
+            f"{file_label} pins {', '.join(hits)}: {why}. Remove it, and rotate every key this machine could reach "
+            "if it was ever installed"}
+
+
+def requirements_unpinned(text: str) -> int:
+    n = 0
+    for line in text.splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line or line.startswith("-"):
+            continue
+        if "==" not in line:
+            n += 1
+    return n
+
+
+def has_dependencies(path: Path, text: str | None) -> bool:
+    if text is None:
+        return True
+    name = path.name
+    try:
+        if name == "package.json":
+            d = json.loads(text)
+            return any(isinstance(d.get(k), dict) and d.get(k)
+                       for k in ("dependencies", "devDependencies", "optionalDependencies"))
+        if name == "pyproject.toml":
+            if tomllib is None:
+                return True
+            d = tomllib.loads(text)
+            proj = d.get("project") or {}
+            poetry = ((d.get("tool") or {}).get("poetry") or {}).get("dependencies") or {}
+            return bool(proj.get("dependencies") or proj.get("optional-dependencies") or d.get("dependency-groups")
+                        or [k for k in poetry if k != "python"])
+        if name == "Cargo.toml":
+            if tomllib is None:
+                return True
+            d = tomllib.loads(text)
+            return bool(d.get("dependencies") or d.get("dev-dependencies") or d.get("workspace"))
+        if name == "go.mod":
+            return bool(re.search(r"(?m)^\s*require\b", text))
+    except (ValueError, AttributeError):
+        return True
+    return True
+
+
+def read_bytes(path: Path, limit: int) -> bytes | None:
+    """Binary read, size-capped. Used only for .git/index."""
+    try:
+        if path.stat().st_size > limit:
+            return None
+        with open(path, "rb") as fh:
+            return fh.read()
+    except OSError:
+        return None
+
+
+def git_index_path(repo: Path) -> Path | None:
+    dotgit = repo / ".git"
+    if dotgit.is_dir():
+        return dotgit / "index"
+    if dotgit.is_file():
+        text = read_text(dotgit, 10_000) or ""
+        m = re.match(r"\s*gitdir:\s*(.+?)\s*$", text)
+        if m:
+            gd = Path(m.group(1))
+            return (gd if gd.is_absolute() else repo / gd) / "index"
+    return None
+
+
+def site_packages(venv: Path) -> list[Path]:
+    out = []
+    if (venv / "Lib" / "site-packages").is_dir():
+        out.append(venv / "Lib" / "site-packages")
+    try:
+        for d in os.listdir(venv / "lib"):
+            if d.startswith("python") and (venv / "lib" / d / "site-packages").is_dir():
+                out.append(venv / "lib" / d / "site-packages")
+    except OSError:
+        pass
+    return out
+
+
+def scan_venv(venv: Path, label: str) -> list[dict]:
+    """Installed metadata of known-bad releases, and .pth files that run code at every Python start."""
+    flags = []
+    pypi_names = {n.replace("-", "_") for e, n, _, _ in KNOWN_COMPROMISED if e == "pypi"}
+    for sp in site_packages(venv):
+        try:
+            entries = os.listdir(sp)
+        except OSError:
+            continue
+        for e in entries:
+            low = e.lower()
+            if low.endswith(".dist-info") and any(low.startswith(n) for n in pypi_names):
+                meta = read_text(sp / e / "METADATA", 5_000_000) or ""
+                name = re.search(r"(?m)^Name:\s*(\S+)", meta)
+                ver = re.search(r"(?m)^Version:\s*(\S+)", meta)
+                if name and ver:
+                    for eco, n, vs, _ in KNOWN_COMPROMISED:
+                        if eco == "pypi" and norm_name(name.group(1)) == n and ver.group(1) in vs:
+                            flags.append(compromised_flag(f"{label} (installed)", [f"{n} {ver.group(1)}"]))
+            elif low.endswith(".pth") and not WELL_KNOWN_PTH.match(e):
+                body = read_text(sp / e, 5_000_000) or ""
+                if re.search(r"(?m)^\s*import[\s;]", body):
+                    flags.append({"id": "suspicious-pth", "reason":
+                                  f"{label}: {e} is not a standard .pth file and runs code every time Python starts in "
+                                  "this environment (the agent-framework stealer used this trick). Read it by hand"})
+    return flags
+
+
+def scan_projects(root: Path, walked: list) -> list[dict]:
+    """Dependency, venv, git-index and gateway-key checks over the directories scan_root walked."""
+    projects: dict[str, dict] = {}
+    locks_by_dir: dict[Path, set] = {}
+    manifests: list[tuple[Path, str]] = []
+
+    def proj(d: Path) -> dict:
+        rel = d.relative_to(root).as_posix() if d != root else "."
+        return projects.setdefault(rel, {"path": rel, "manifests": [], "lockfiles": [], "venvs": 0, "flags": []})
+
+    for here, dirnames_all, filenames in walked:
+        for d in dirnames_all:
+            sub = here / d
+            if (sub / "pyvenv.cfg").is_file():
+                p = proj(here)
+                p["venvs"] += 1
+                p["flags"] += scan_venv(sub, (sub.relative_to(root).as_posix()))
+        if ".git" in dirnames_all or ".git" in filenames:
+            idx = git_index_path(here)
+            data = read_bytes(idx, 200_000_000) if idx else None
+            if data and b".claude/settings.local.json" in data:
+                proj(here)["flags"].append({"id": "local-settings-tracked", "reason":
+                    ".claude/settings.local.json is tracked by git, so every command approved with \"don't ask again\" "
+                    "(secrets included) is pushed with the repo"})
+        if "node_modules" in dirnames_all:
+            hidden_lock = here / "node_modules" / ".package-lock.json"
+            text = read_text(hidden_lock, LOCK_MAX_BYTES) if hidden_lock.is_file() else None
+            hits = compromised_in_json_lock(text, "npm") if text else []
+            if hits:
+                proj(here)["flags"].append(compromised_flag("node_modules (installed)", hits))
+        for f in filenames:
+            p = here / f
+            rel = p.relative_to(root).as_posix()
+            if f in LOCKFILES:
+                eco = LOCKFILES[f]
+                locks_by_dir.setdefault(here, set()).add(eco)
+                proj(here)["lockfiles"].append(f)
+                if f == "bun.lockb":
+                    continue
+                text = read_text(p, LOCK_MAX_BYTES)
+                if text:
+                    hits = (compromised_in_json_lock(text, eco) if f.endswith(".json") or f == "Pipfile.lock"
+                            else compromised_in_text(text, eco, "line" if f == "bun.lock" else "block"))
+                    if hits:
+                        proj(here)["flags"].append(compromised_flag(rel, hits))
+            elif f in MANIFESTS:
+                manifests.append((p, MANIFESTS[f]))
+                proj(here)["manifests"].append(f)
+                if f in ("pyproject.toml", "Pipfile"):
+                    text = read_text(p)
+                    hits = compromised_in_text(text or "", "pypi", "line")
+                    if hits:
+                        proj(here)["flags"].append(compromised_flag(rel, hits))
+            elif REQUIREMENTS_RE.match(f):
+                text = read_text(p) or ""
+                proj(here)["manifests"].append(f)
+                hits = compromised_in_text(text, "pypi", "line")
+                if hits:
+                    proj(here)["flags"].append(compromised_flag(rel, hits))
+                loose = requirements_unpinned(text)
+                if loose:
+                    manifests.append((p, "pypi-req"))
+                else:
+                    locks_by_dir.setdefault(here, set()).add("pypi")
+            if GATEWAY_FILE_RE.match(f):
+                text = read_text(p) or ""
+                if GATEWAY_KEY_RE.search(text) and GATEWAY_HINT_RE.search(text):
+                    proj(here)["flags"].append({"id": "default-gateway-key", "reason":
+                        f"{rel} sets an AI gateway key to the documented LiteLLM default (sk-1234). Anyone who can reach "
+                        "the gateway can spend through it; set a long random key"})
+
+    for path, eco in manifests:
+        kind = "pypi" if eco == "pypi-req" else eco
+        d, covered = path.parent, False
+        while True:
+            if kind in locks_by_dir.get(d, set()):
+                covered = True
+                break
+            if d == root or root not in d.parents:
+                break
+            d = d.parent
+        if covered:
+            continue
+        text = read_text(path)
+        if eco != "pypi-req" and not has_dependencies(path, text):
+            continue
+        rel = path.relative_to(root).as_posix()
+        extra = f" ({requirements_unpinned(text or '')} unpinned line(s))" if eco == "pypi-req" else ""
+        proj(path.parent)["flags"].append({"id": "no-lockfile", "reason":
+            f"{rel} has dependencies but no lockfile{extra} (expected {LOCK_NAMES[kind]}), so every install takes "
+            "the newest release; that is how a poisoned release reaches you"})
+    return [p for p in projects.values() if p["manifests"] or p["flags"] or p["venvs"] or p["lockfiles"]]
+
+
+# --------------------------------------------------------------------------- history
+
+HISTORY_RULES = [
+    ("anthropic", r"sk-ant-[A-Za-z0-9_\-]{20,}"),
+    ("openrouter", r"sk-or-v1-[A-Za-z0-9]{32,}"),
+    ("openai", r"sk-(?:proj|svcacct|admin)-[A-Za-z0-9_\-]{20,}|sk-[A-Za-z0-9]{32,}"),
+    ("github", r"(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{50,}"),
+    ("aws", r"AKIA[0-9A-Z]{16}"),
+    ("slack", r"xox[abprs]-[A-Za-z0-9\-]{10,}"),
+    ("google", r"AIza[0-9A-Za-z_\-]{35}"),
+    ("stripe", r"(?:sk|rk)_live_[A-Za-z0-9]{20,}"),
+    ("private-key", r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----(?:\\n|\\r|\s)+[A-Za-z0-9+/=]{40,}"),
+    ("jwt", r"eyJ[A-Za-z0-9_\-]{10,}\.eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}"),
+    ("bearer", r"Bearer\s+[A-Za-z0-9._~+/\-]{30,}=*"),
+]
+HISTORY_RE = re.compile(r"(?:(?<![A-Za-z0-9_\-])|(?<=\\[nrt]))(?:" + "|".join(f"(?P<{t.replace('-', '_')}>{p})" for t, p in HISTORY_RULES) + ")")
+SPECIFIC_RE = {t: re.compile(p) for t, p in HISTORY_RULES if t != "bearer"}
+# Transcripts are large, so lines are scanned as bytes: one cheap pass for where a token could
+# start, then the full patterns only at those spots.
+HISTORY_RE_B = re.compile(HISTORY_RE.pattern.encode())
+CANDIDATE_RE_B = re.compile(rb"sk-|[sr]k_live_|gh[pousr]_|github_pat_|AKIA|xox[abprs]-|AIza|-----BEGIN|Bearer\s|eyJ")
+PLACEHOLDER_RE = re.compile(r"(?i)xxxx|your|example|dummy|placeholder|redacted|0000000|1234567|abcdefgh")
+TIMESTAMP_RE = re.compile(rb'"timestamp"\s*:\s*"(\d{4}-\d{2}-\d{2})')
+
+
+def find_secrets(line: bytes):
+    end = 0
+    for c in CANDIDATE_RE_B.finditer(line):
+        if c.start() < end:
+            continue
+        m = HISTORY_RE_B.match(line, c.start())
+        if m:
+            end = m.end()
+            yield m
+MAX_LINE = 4_000_000
+MAX_LIST = 25
+
+
+def mangle(path: str) -> str:
+    """How Claude Code names a project's transcript folder: every non-alphanumeric character becomes '-'."""
+    return re.sub(r"[^A-Za-z0-9]", "-", path)
+
+
+def folder_matches(name: str, prefix: str) -> bool:
+    n, p = name.lower(), prefix.lower().rstrip("-")
+    return n == p or n.startswith(p + "-")
+
+
+def _classify(kind: str, value: str) -> tuple[str, str] | None:
+    """Return (type, secret) for a hit, or None if it looks like a placeholder."""
+    if kind == "bearer":
+        value = re.sub(r"^Bearer\s+", "", value)
+        if _is_reference(value):
+            return None
+        for t, rx in SPECIFIC_RE.items():
+            if rx.fullmatch(value):
+                kind = t
+                break
+    if kind == "private-key":
+        return kind, value
+    body = re.sub(r"^(?:sk-(?:ant-|or-v1-|proj-|svcacct-|admin-)?|(?:sk|rk)_live_|gh[a-z]_|github_pat_|xox[a-z]-|AIza|AKIA)", "", value)
+    if len(set(body)) < 8 or PLACEHOLDER_RE.search(value):
+        return None
+    if kind == "bearer" and not (re.search(r"\d", value) and re.search(r"[A-Za-z]", value)):
+        return None
+    return kind, value
+
+
+def history_files(only: str | None) -> list[tuple[str, Path]]:
+    """(group label, file) for every transcript in scope."""
+    home = home_dir()
+    out = []
+    projects = home / ".claude" / "projects"
+    prefix = mangle(only) if only else None
+    try:
+        folders = sorted(os.scandir(projects), key=lambda e: e.name) if projects.is_dir() else []
+    except OSError:
+        folders = []
+    for entry in folders:
+        if not entry.is_dir() or (prefix and not folder_matches(entry.name, prefix)):
+            continue
+        for dp, _, fns in os.walk(entry.path):
+            out += [(f"~/.claude/projects/{entry.name}", Path(dp) / f) for f in fns if f.endswith(".jsonl")]
+    sessions = home / ".codex" / "sessions"
+    if sessions.is_dir():
+        for dp, _, fns in os.walk(sessions):
+            for f in fns:
+                if not f.endswith(".jsonl"):
+                    continue
+                p = Path(dp) / f
+                if prefix:
+                    cwd = codex_cwd(p)
+                    if not cwd or not folder_matches(mangle(cwd), prefix):
+                        continue
+                out.append(("~/.codex/sessions", p))
+    hist = home / ".codex" / "history.jsonl"
+    if not prefix and hist.is_file():
+        out.append(("~/.codex/history.jsonl", hist))
+    return out
+
+
+def codex_cwd(path: Path) -> str | None:
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            first = fh.readline(MAX_LINE)
+    except OSError:
+        return None
+    m = re.search(r'"cwd"\s*:\s*"((?:[^"\\]|\\.)*)"', first)
+    if not m:
+        return None
+    try:
+        return json.loads(f'"{m.group(1)}"')
+    except ValueError:
+        return None
+
+
+def scan_history(only: str | None, max_seconds: float) -> dict:
+    """Secrets pasted into or printed in agent sessions. Values are never kept in the report."""
+    start = time.monotonic()
+    files = history_files(only)
+    def mtime(p: Path) -> float:
+        try:
+            return p.stat().st_mtime
+        except OSError:
+            return 0.0
+    files.sort(key=lambda gp: -mtime(gp[1]))  # newest first, so a time cap drops the oldest
+    groups: dict[str, dict] = {}
+    for label, _ in files:
+        groups.setdefault(label, {"folder": label, "files": 0, "scanned": 0, "unique": {}, "occurrences": {},
+                                  "newest": "", "examples": [], "_seen": set()})["files"] += 1
+    scanned = skipped_long = 0
+    capped = False
+    for label, path in files:
+        if time.monotonic() - start >= max_seconds:
+
+            capped = True
+            break
+        g = groups[label]
+        g["scanned"] += 1
+        scanned += 1
+        try:
+            fh = open(path, "rb")
+        except OSError:
+            continue
+        with fh:
+            n = 0
+            while True:
+                line = fh.readline(MAX_LINE)
+                if not line:
+                    break
+                n += 1
+                if len(line) >= MAX_LINE and not line.endswith(b"\n"):
+                    skipped_long += 1
+                    while True:
+                        rest = fh.readline(MAX_LINE)
+                        if not rest or rest.endswith(b"\n"):
+                            break
+                    continue
+                for m in find_secrets(line):
+                    res = _classify(m.lastgroup.replace("_", "-"), m.group(0).decode("ascii", "replace"))
+                    if not res:
+                        continue
+                    kind, value = res
+                    g["occurrences"][kind] = g["occurrences"].get(kind, 0) + 1
+                    ts = TIMESTAMP_RE.search(line)
+                    day = ts.group(1).decode() if ts else time.strftime("%Y-%m-%d", time.localtime(mtime(path)))
+                    g["newest"] = max(g["newest"], day)
+                    key = (kind, value)
+                    if key in g["_seen"]:
+                        continue
+                    g["_seen"].add(key)
+                    g["unique"][kind] = g["unique"].get(kind, 0) + 1
+                    if len(g["examples"]) < MAX_LIST:
+                        g["examples"].append({"type": kind, "prefix": value[:4] + "****", "file": path.name,
+                                              "line": n, "date": day})
+    out_groups = []
+    total = 0
+    for g in groups.values():
+        g.pop("_seen")
+        total += sum(g["unique"].values())
+        out_groups.append(g)
+    out_groups.sort(key=lambda g: (-sum(g["unique"].values()), g["folder"]))
+    flags = []
+    for g in out_groups:
+        if g["unique"]:
+            kinds = ", ".join(f"{v} {k}" for k, v in sorted(g["unique"].items(), key=lambda kv: -kv[1]))
+            flags.append({"id": "secret-in-history", "reason":
+                          f"{g['folder']}: {kinds} (newest {g['newest']}); rotate each one, then delete or redact the transcript"})
+    return {"scope": only or "all projects", "files_total": len(files), "files_scanned": scanned,
+            "long_lines_skipped": skipped_long, "capped": capped, "seconds": round(time.monotonic() - start, 1),
+            "unique_secrets": total, "folders": [g for g in out_groups if g["unique"]] , "folders_total": len(out_groups),
+            "flags": flags}
+
+
+# --------------------------------------------------------------------------- extensions
+
+KNOWN_BAD_EXTENSIONS = {
+    ("anthropic.claude-code", "2.1.312"): "fake copy of the Claude Code extension seen in Cursor's marketplace cache",
+    ("anthropic.claude-code", "2.1.313"): "fake copy of the Claude Code extension seen in Cursor's marketplace cache",
+}
+EXTENSION_DIRS = [(".vscode/extensions", "VS Code"), (".cursor/extensions", "Cursor"),
+                  (".windsurf/extensions", "Windsurf")]
+EXT_RE = re.compile(r"^(?P<id>[A-Za-z0-9][\w\-]*\.[A-Za-z0-9][\w.\-]*?)-(?P<ver>\d+\.\d+\.\d+)(?P<rest>[\w.\-]*)$")
+
+
+def scan_extensions() -> list[dict]:
+    out = []
+    for rel, editor in EXTENSION_DIRS:
+        d = home_dir() / rel
+        if not d.is_dir():
+            continue
+        try:
+            names = [e.name for e in os.scandir(d) if e.is_dir()]
+        except OSError:
+            continue
+        flags = []
+        for name in sorted(names):
+            m = EXT_RE.match(name)
+            if not m:
+                continue
+            why = KNOWN_BAD_EXTENSIONS.get((m.group("id").lower(), m.group("ver")))
+            if why:
+                flags.append({"id": "known-bad-extension", "reason":
+                              f"{name}: {why}. Uninstall it, then rotate every key the editor could reach"})
+        out.append({"editor": editor, "path": "~/" + rel, "count": len(names), "flags": flags})
+    return out
+
+
+# --------------------------------------------------------------------------- driving (cont.)
+
+def scan_root(root: Path, scanner: Scanner) -> tuple[list, list, list]:
+    configs, docs, walked = [], [], []
     root = root.expanduser()
     if root.is_file():
         agent = match_target(root) or "unknown"
-        return [scan_config(root, agent, root.parent, scanner, root.name)], []
+        return [scan_config(root, agent, root.parent, scanner, root.name)], [], []
     for dirpath, dirnames, filenames in os.walk(root):
+        here = Path(dirpath)
+        walked.append((here, list(dirnames), list(filenames)))
         dirnames[:] = sorted(d for d in dirnames
                              if d not in SKIP_DIRS and not os.path.exists(os.path.join(dirpath, d, "pyvenv.cfg")))
-        here = Path(dirpath)
         for f in sorted(filenames):
             p = here / f
             rel = p.relative_to(root).as_posix()
@@ -610,11 +1147,11 @@ def scan_root(root: Path, scanner: Scanner) -> tuple[list, list]:
                 d = scan_markdown(p, rel, scanner)
                 if d:
                     docs.append(d)
-    return configs, docs
+    return configs, docs, scan_projects(root, walked)
 
 
 def scan_user(scanner: Scanner) -> list:
-    home = Path.home()
+    home = home_dir()
     out = []
     for rel, agent in USER_FILES:
         p = home / rel
@@ -623,29 +1160,49 @@ def scan_user(scanner: Scanner) -> list:
     return out
 
 
-def summarize(configs: list, docs: list) -> dict:
+def all_flag_lists(report: dict) -> list[list]:
+    lists = [it["flags"] for c in report["configs"] for it in c["items"]]
+    lists += [d["flags"] for d in report["instructions"]]
+    lists += [p["flags"] for p in report.get("projects", [])]
+    lists += [e["flags"] for e in report.get("extensions") or []]
+    if report.get("history"):
+        lists += [report["history"]["flags"]]
+    return lists
+
+
+def summarize(report: dict) -> dict:
     cats, flags = {}, {}
-    flagged = 0
-    for c in configs:
+    for c in report["configs"]:
         for it in c["items"]:
             cats[it["category"]] = cats.get(it["category"], 0) + 1
-            if it["flags"]:
-                flagged += 1
-            for f in it["flags"]:
-                flags[f["id"]] = flags.get(f["id"], 0) + 1
-    for d in docs:
-        if d["flags"]:
-            flagged += 1
-        for f in d["flags"]:
+    flagged = 0
+    for fl in all_flag_lists(report):
+        if fl:
+            flagged += 1 if fl is not (report.get("history") or {}).get("flags") else len(fl)
+        for f in fl:
             flags[f["id"]] = flags.get(f["id"], 0) + 1
-    return {"config_files": len(configs), "entries": sum(cats.values()), "by_category": cats,
-            "instruction_files_with_hits": len(docs), "flagged_entries": flagged, "flags": flags}
+    projects = report.get("projects", [])
+    out = {"config_files": len(report["configs"]), "entries": sum(cats.values()), "by_category": cats,
+           "instruction_files_with_hits": len(report["instructions"]),
+           "projects_with_manifests": sum(1 for p in projects if p["manifests"]),
+           "flagged_entries": flagged, "flags": flags}
+    if report.get("extensions") is not None:
+        out["extensions"] = sum(e["count"] for e in report["extensions"])
+    if report.get("history"):
+        h = report["history"]
+        out["history"] = {"files": h["files_total"], "scanned": h["files_scanned"], "unique_secrets": h["unique_secrets"],
+                          "capped": h["capped"], "seconds": h["seconds"]}
+    return out
+
+
+ADVICE = ("Stolen AI keys get resold and run up bills (LLMjacking): give each tool its own key with a spend limit, "
+          "and never expose an AI gateway (LiteLLM, Ollama, Open WebUI) with a default key.")
 
 
 def print_text(report: dict) -> None:
     print(f"agent-config-audit (read-only) on: {', '.join(report['roots'])}")
     print("values redacted; pass --show-values to see them" if report["redacted"]
-          else "WARNING: --show-values is on; secrets below are printed as-is")
+          else "WARNING: --show-values is on; secrets below are printed as-is (history hits stay redacted)")
     for c in report["configs"]:
         print(f"\n== {c['path']}  [{c['agent']}]")
         if not c["items"]:
@@ -663,42 +1220,108 @@ def print_text(report: dict) -> None:
                 print(f"      {ln['line']}: {ln['text']}")
             for f in d["flags"]:
                 print(f"      !! {f['id']}: {f['reason']}")
+    if report.get("projects"):
+        print("\n== dependencies (manifests, lockfiles, virtualenvs, git index)")
+        for p in report["projects"]:
+            parts = []
+            if p["manifests"]:
+                parts.append("manifests: " + ", ".join(sorted(set(p["manifests"]))))
+            if p["lockfiles"]:
+                parts.append("lockfiles: " + ", ".join(sorted(set(p["lockfiles"]))))
+            if p["venvs"]:
+                parts.append(f"venvs: {p['venvs']}")
+            print(f"   {p['path']}  " + "; ".join(parts))
+            for f in p["flags"]:
+                print(f"      !! {f['id']}: {f['reason']}")
+    if report.get("extensions") is not None:
+        print("\n== editor extensions")
+        if not report["extensions"]:
+            print("   (no VS Code, Cursor or Windsurf extension folders)")
+        for e in report["extensions"]:
+            print(f"   {e['path']}  [{e['editor']}]  {e['count']} installed")
+            for f in e["flags"]:
+                print(f"      !! {f['id']}: {f['reason']}")
+    h = report.get("history")
+    if h:
+        cap = "  CAPPED: oldest files not scanned, raise --history-max-seconds" if h["capped"] else ""
+        print(f"\n== conversation history ({h['scope']}): {h['files_scanned']} of {h['files_total']} transcript file(s) "
+              f"in {h['folders_total']} folder(s), {h['seconds']}s{cap}")
+        if h["long_lines_skipped"]:
+            print(f"   {h['long_lines_skipped']} line(s) over {MAX_LINE // 1_000_000} MB skipped")
+        if not h["folders"]:
+            print("   no high-confidence secrets found")
+        for g in h["folders"]:
+            kinds = ", ".join(f"{v} {k}" for k, v in sorted(g["unique"].items(), key=lambda kv: -kv[1]))
+            print(f"   {g['folder']}  {g['files']} file(s); unique secrets: {kinds}; newest hit {g['newest']}")
+            for ex in g["examples"]:
+                print(f"      {ex['type']:<12} {ex['prefix']}  {ex['file']}:{ex['line']}  ({ex['date']})")
+            more = sum(g["unique"].values()) - len(g["examples"])
+            if more > 0:
+                print(f"      ... and {more} more")
+        for f in h["flags"]:
+            print(f"   !! {f['id']}: {f['reason']}")
     s = report["summary"]
     print("\n== summary")
     cats = ", ".join(f"{v} {k}" for k, v in sorted(s["by_category"].items(), key=lambda kv: -kv[1])) or "none"
     print(f"   {s['config_files']} config file(s), {s['entries']} entries: {cats}")
     print(f"   {s['instruction_files_with_hits']} skill/instruction file(s) with shell, tool grants, hooks or hidden text")
+    print(f"   {s['projects_with_manifests']} folder(s) with dependency manifests")
+    if "extensions" in s:
+        print(f"   {s['extensions']} editor extension(s) installed")
+    if "history" in s:
+        hs = s["history"]
+        print(f"   history: {hs['scanned']} of {hs['files']} transcript file(s), {hs['unique_secrets']} unique secret(s)"
+              f"{' (capped)' if hs['capped'] else ''}")
     if s["flags"]:
         fl = ", ".join(f"{k} {v}" for k, v in sorted(s["flags"].items(), key=lambda kv: -kv[1]))
         print(f"   {s['flagged_entries']} flagged: {fl}")
     else:
         print("   0 flagged. That is not the same as safe: read every hook and server above.")
+    print(f"\n   {ADVICE}")
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Read-only audit of what coding-agent config can run.")
     ap.add_argument("roots", nargs="*", default=["."], help="repo, folder of repos, or a single config file")
-    ap.add_argument("--user", action="store_true", help="also read user-level config in your home directory")
+    ap.add_argument("--user", action="store_true",
+                    help="also read user-level config and installed editor extensions in your home directory")
+    ap.add_argument("--history", action="store_true",
+                    help="scan every Claude Code and Codex transcript for pasted or printed secrets")
+    ap.add_argument("--history-for", metavar="REPO",
+                    help="scan only the transcripts of this repo (and its worktrees)")
+    ap.add_argument("--history-max-seconds", type=float, default=300.0,
+                    help="stop the history scan after this long, newest files first (default 300)")
     ap.add_argument("--json", action="store_true", help="print structured JSON")
-    ap.add_argument("--show-values", action="store_true", help="print env values and tokens unredacted")
+    ap.add_argument("--show-values", action="store_true",
+                    help="print config env values and tokens unredacted (history hits are always redacted)")
     a = ap.parse_args(argv)
 
     scanner = Scanner(show=a.show_values)
-    configs, docs, roots = [], [], []
+    configs, docs, projects, roots = [], [], [], []
     for r in a.roots:
         root = Path(r).expanduser()
         if not root.exists():
             print(f"no such path: {r}", file=sys.stderr)
             return 2
         roots.append(str(root))
-        c, d = scan_root(root, scanner)
+        c, d, p = scan_root(root, scanner)
         configs += c
         docs += d
+        if len(a.roots) > 1:
+            for proj in p:
+                proj["path"] = f"{root.name}/{proj['path']}"
+        projects += p
+    report = {"roots": roots, "redacted": not a.show_values, "configs": configs, "instructions": docs,
+              "projects": projects}
     if a.user:
         roots.append("~ (user config)")
         configs += scan_user(scanner)
-    report = {"roots": roots, "redacted": not a.show_values, "configs": configs,
-              "instructions": docs, "summary": summarize(configs, docs)}
+        report["extensions"] = scan_extensions()
+    if a.history or a.history_for:
+        only = str(Path(a.history_for).expanduser().resolve()) if a.history_for else None
+        report["history"] = scan_history(only, a.history_max_seconds)
+    report["advice"] = ADVICE
+    report["summary"] = summarize(report)
     if a.json:
         print(json.dumps(report, indent=2))
     else:
