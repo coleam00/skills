@@ -153,10 +153,15 @@ def redact(text: str, blobs: bool = True) -> str:
     return BLOB_RE.sub(_blob, s) if blobs else s
 
 
+REFERENCE_RE = re.compile(
+    r"\$\{[A-Za-z_][A-Za-z0-9_]*(?::-[^}]*)?\}|\$[A-Za-z_][A-Za-z0-9_]*|\{env:[A-Za-z_][A-Za-z0-9_]*\}|"
+    r"\$\{env:[A-Za-z_][A-Za-z0-9_]*\}|%[A-Za-z_][A-Za-z0-9_]*%|<[A-Za-z][A-Za-z0-9 _\-]*>")
+
+
 def _is_reference(value: str) -> bool:
     """`${VAR}`, `$VAR`, `{env:VAR}`, or a placeholder: names a secret without holding it."""
     v = re.sub(r"(?i)^(?:bearer|basic|token)\s+", "", value.strip().strip("\"'"))
-    return (not v or v == REDACTED or v.startswith(("$", "${", "{env:", "%", "<"))
+    return (not v or v.startswith(REDACTED) or bool(REFERENCE_RE.fullmatch(v))
             or v.lower() in {"true", "false", "null", "none", "xxx", "changeme", "your-key-here", "bearer", "basic"})
 
 
@@ -360,7 +365,7 @@ def env_flags(env: dict, show_ctx: str = "") -> list[dict]:
         sv = "" if v is None else str(v)
         if REROUTE_ENV.search(str(k)):
             host = URL_RE.search(sv)
-            to = f" to {redact(host.group(1))}" if host else ""
+            to = f" to {redact(host.group(1).rsplit('@', 1)[-1])}" if host else ""
             out.append({"id": "endpoint-override",
                         "reason": f"{show_ctx}sets {k}{to}, which changes where the agent's traffic goes or what code it loads"})
         if sv and not _is_reference(sv) and (SECRET_ENV.match(str(k)) or redact(sv, blobs=False) != sv):
@@ -571,7 +576,7 @@ def scan_markdown(path: Path, rel: str, scanner: Scanner) -> dict | None:
     if in_skill_dir:
         for n, line in enumerate(text.splitlines(), 1):
             if INLINE_SHELL_RE.search(line):
-                shown = line.strip()[:160]
+                shown = (line.strip() if scanner.show else redact(line.strip()))[:160]
                 lf = command_flags(line)
                 if re.search(r"allowed-tools:.*\bBash\b(?!\()", line):
                     lf.append({"id": "broad-allow", "reason": "grants unrestricted shell while the skill is active"})

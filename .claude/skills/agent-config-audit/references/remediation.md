@@ -29,7 +29,8 @@ publish credentials.
   `.claude/settings.json` hook and a `.vscode/tasks.json` `folderOpen` task that each
   relaunch the other; cleaning one leaves a live path.
 - VS Code and Cursor: keep workspace trust on (`"security.workspace.trust.enabled": true`)
-  and stop automatic tasks with `"task.allowAutomaticTasks": "off"` in user settings.
+  and stop automatic tasks with `"task.allowAutomaticTasks": "off"` in user settings
+  (the default is `"on"`).
 - A hook that needs the network should say why in a comment or the README. If nobody can
   say, remove it.
 
