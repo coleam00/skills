@@ -94,8 +94,10 @@ problems found".
 
 ## Step 4: for repos already trusted, read the history
 
-A repo the user already opens daily is where a malicious change lands unnoticed. Show
-what changed in the agent config and who changed it:
+A repo the user already opens daily is where a malicious change lands unnoticed. Trust
+is remembered per folder: tested on Claude Code 2.1.330 (2026-11-21), a hook committed
+to an already-trusted repo ran on the next launch with no new prompt. Show what changed
+in the agent config and who changed it:
 
 ```bash
 git log -p -- .claude .mcp.json .codex .cursor .vscode .gemini AGENTS.md CLAUDE.md
