@@ -153,6 +153,12 @@ For the last two, restart your session (or run `/skills`) and they'll show up.
 |---|---|
 | `build-signal-engine` | Interviews you about what you need to keep up with, what you missed last month and where it showed up, then builds a system from scratch that reads every source you care about (changelogs, communities, feeds, videos), makes a quick decision on every item, and hands an LLM only what survives for one daily digest. Built a stage at a time into your repo, each proven on real data |
 
+**Security: what your agent runs**
+
+| Skill | What it does |
+|---|---|
+| `agent-config-audit` | Read-only audit of everything a repo's agent config can run on its own: Claude Code hooks and helpers, MCP servers, Codex, Cursor and Gemini CLI config, VS Code folder-open tasks, allow rules, auto-approval and plugin sources. Flags downloads piped to a shell, encoded commands, `ANTHROPIC_BASE_URL` overrides, unpinned MCP packages and secrets in config, explains each in plain words with the fix, and never prints a secret. Point it at a repo before you open it, or at your whole code folder |
+
 **Tools**
 
 | Skill | What it does |
