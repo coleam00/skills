@@ -54,6 +54,23 @@ publish credentials.
   { "permissions": { "deny": ["Read(./.env)", "Read(./.env.*)", "Read(./secrets/**)", "Read(~/.ssh/**)", "Read(~/.aws/**)"] } }
   ```
 
+- Keep secrets out of the session entirely. Put them in an .env file the agent never
+  opens, and have the agent load them from the environment in code
+  (`os.environ["API_KEY"]`, `process.env.API_KEY`). Never paste a live key into a prompt:
+  agent sessions are stored.
+- Enforce it with a hook, not a rule. `references/secrets-guard-hook.py` is a PreToolUse
+  hook that blocks every route to a credential (env files, SSH keys, `.pem`, `.aws`,
+  `.netrc`, dumping the process environment) and `rm -rf`, and allows a committed
+  `.env.example`. Copy it to `.claude/hooks/pre_tool_use_secrets.py` and register it:
+
+  ```json
+  { "hooks": { "PreToolUse": [ { "matcher": "Read|Edit|MultiEdit|Write|NotebookEdit|Bash|PowerShell|Grep|Glob",
+    "hooks": [ { "type": "command", "command": "uv run ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre_tool_use_secrets.py", "timeout": 15 } ] } ] } }
+  ```
+
+  Tested on Claude Code 2.1.330 on Windows (2026-11-21): asked to read the env file,
+  the agent was blocked and did not try to work around it; asked to call an API with
+  the key, it wrote code that loads it from the environment.
 - Lock out bypass mode: `{ "permissions": { "disableBypassPermissionsMode": "disable" } }`.
 - On macOS, Linux and WSL2, turn on the sandbox with `/sandbox`. It does not run on
   native Windows.

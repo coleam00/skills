@@ -142,3 +142,6 @@ settings and the cleanup steps after a real compromise are in
   it after editing the scanner.
 - `references/remediation.md`: concrete fixes for individuals and teams, and what to
   do when a hook already ran.
+- `references/secrets-guard-hook.py`: a PreToolUse hook that blocks the agent from
+  reading secrets (env files, keys, environment dumps). Recommend it whenever the scan
+  finds secrets in config or the user has no secret guard; setup is in remediation.md.
