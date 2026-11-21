@@ -564,6 +564,9 @@ def is_instruction(path: Path, parts: tuple) -> bool:
 
 
 def scan_markdown(path: Path, rel: str, scanner: Scanner) -> dict | None:
+    # This skill's own docs describe the patterns it looks for, so they would flag themselves.
+    if re.search(r"(^|/)agent-config-audit/", rel.replace("\\", "/")):
+        return None
     text = read_text(path)
     if not text:
         return None
